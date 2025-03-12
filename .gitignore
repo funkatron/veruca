@@ -1,0 +1,23 @@
+# common ignores for MacOS, Python, PyCharm
+.DS_Store
+__pycache__
+.idea/
+chroma_db/
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm
+.idea
