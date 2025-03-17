@@ -1,6 +1,6 @@
 # Veruca - Obsidian Vault Query Tool
 
-A powerful tool for indexing and querying your Obsidian vault using local embeddings and LLMs. It provides a simple way to search through your notes using natural language queries, while preserving Obsidian's unique features and metadata. **All data is processed locally, without sending any data to external servers.**
+Veruca is a project to build a personal, local LLM-powered knowledge base. This tool, the Obsidian importer, helps you build that knowledge base by indexing and querying your Obsidian vault using local embeddings and LLMs. It processes your notes while preserving Obsidian's features and metadata. **All data is processed locally, without sending any data to external servers.**
 
 ## Documentation
 
