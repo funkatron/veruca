@@ -18,6 +18,8 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.schema import Document
 
+__version__ = "0.1.0"
+
 # Get the user's data directory
 USER_DATA_DIR = os.path.expanduser("~/.local/share/veruca")
 CHROMA_DB_PATH = os.path.join(USER_DATA_DIR, "chroma")
@@ -49,9 +51,11 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 #     #              # Hash
 #     |              # OR
 #     $              # End of string
+#     |              # OR
+#     :              # Colon (for Obsidian's tag syntax)
 #   )
 # )
-TAG_PATTERN = r'(?:^|\s|[^\w#])#([\w-]+(?:/[\w-]+)*)(?=(?:\s|[^\w#/]|/(?!\w)|#|$))'
+TAG_PATTERN = r'(?:^|\s|[^\w#])#([\w-]+(?:/[\w-]+)*)(?=(?:\s|[^\w#/]|/(?!\w)|#|$|:))'
 
 # Custom prompt template for better context
 CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
