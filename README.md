@@ -124,6 +124,25 @@ Here are some example queries to demonstrate how to use the tool effectively:
 ./obsidian.py --query "What notes are related to my research on AI?"
 ```
 
+5. **Viewing Source Documents and Metadata**
+```sh
+# Example response showing source documents and metadata:
+Answer: Based on your research notes, you've been exploring machine learning applications in healthcare.
+
+Sources:
+1. healthcare-ml-notes.md (Score: 0.89)
+   Tags: #research, #healthcare, #ml
+   Path: projects/healthcare/healthcare-ml-notes.md
+   Created: 2024-02-15
+   Status: in-progress
+
+2. ml-papers-summary.md (Score: 0.85)
+   Tags: #research, #ml, #papers
+   Path: research/papers/ml-papers-summary.md
+   Last Modified: 2024-03-10
+   Type: literature-review
+```
+
 The tool will provide:
 - A detailed answer based on the relevant content
 - Source documents with their paths and tags
