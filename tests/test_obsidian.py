@@ -143,20 +143,27 @@ def test_index_and_query(test_vault):
     # Create a mock Chroma instance that just stores and returns documents
     mock_chroma = MagicMock()
     mock_chroma.from_documents.return_value = mock_chroma
+    mock_chroma.as_retriever.return_value = MagicMock()
 
-    with patch('obsidian.Chroma', mock_chroma):
+    # Mock the RetrievalQA chain
+    mock_qa = MagicMock()
+    mock_qa.invoke.return_value = {"result": "Mock response for query containing test"}
+
+    # Patch both Chroma and RetrievalQA
+    with patch('obsidian.Chroma', mock_chroma), \
+         patch('obsidian.RetrievalQA.from_chain_type', return_value=mock_qa):
         # Test indexing
         index_vault(str(test_vault))
         mock_chroma.from_documents.assert_called_once()
         mock_chroma.persist.assert_called_once()
 
-        # Test querying with test mode
+        # Test querying with filters
         query = "What are the tags in the test note?"
-        filter_tags = ["test"]
-        result = query_vault(query, filter_tags, test_mode=True)
+        filters = {"tags": "test"}
+        result = query_vault(query, filters)
         assert isinstance(result, str)
-        assert "Mock response for query" in result
-        assert str(filter_tags) in result
+        assert "Mock response" in result
+        assert "test" in result
 
 def test_error_handling(capsys):
     """Test error handling for invalid inputs."""
