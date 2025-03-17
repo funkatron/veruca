@@ -279,19 +279,18 @@ def index_vault(vault_path: str) -> None:
         print(f"Error processing documents: {str(e)}")
         raise SystemExit(1)
 
-def query_vault(query: str, filter_tags: List[str] = None, filters: Dict[str, str] = {}) -> str:
-    """Query the vault with a natural language query and optional tag filters.
+def query_vault(query: str, filters: Dict[str, str] = {}) -> str:
+    """Query the vault with a natural language query and optional metadata filters.
 
     Args:
         query: The natural language query
-        filter_tags: Optional list of tags to filter results by
         filters: Optional dictionary of metadata fields to filter results by
 
     Returns:
         str: The response from the LLM
     """
     try:
-        print(f"Querying with: {query}, filter_tags: {filter_tags}, filters: {filters}")
+        print(f"Querying with: {query}, filters: {filters}")
         embedding_model = OllamaEmbeddings(model="nomic-embed-text")
         print("Created embedding model")
         vector_store = Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embedding_model)
@@ -301,29 +300,26 @@ def query_vault(query: str, filter_tags: List[str] = None, filters: Dict[str, st
         docs = vector_store.similarity_search(query)
         print(f"Found {len(docs)} relevant documents")
 
-        # Filter documents by tags if specified
-        if filter_tags:
-            filtered_docs = []
-            for doc in docs:
-                doc_tags = doc.metadata.get("tags", "").split(",")
-                if any(tag in doc_tags for tag in filter_tags):
-                    filtered_docs.append(doc)
-            docs = filtered_docs
-            print(f"After tag filtering: {len(docs)} documents")
-
         # Filter documents by metadata if specified
         if filters:
             filtered_docs = []
             for doc in docs:
                 doc_matches = True
                 for field, value in filters.items():
-                    if doc.metadata.get(field) != value:
+                    if field == "tags":
+                        # Special handling for tags since they're stored as comma-separated string
+                        doc_tags = doc.metadata.get("tags", "").split(",")
+                        filter_tags = value.split(",")
+                        if not any(tag in doc_tags for tag in filter_tags):
+                            doc_matches = False
+                            break
+                    elif doc.metadata.get(field) != value:
                         doc_matches = False
                         break
                 if doc_matches:
                     filtered_docs.append(doc)
             docs = filtered_docs
-            print(f"After metadata filtering: {len(docs)} documents")
+            print(f"After filtering: {len(docs)} documents")
 
         for doc in docs:
             print(f"Document metadata: {doc.metadata}")
@@ -463,7 +459,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Query your Obsidian vault using Ollama.")
     parser.add_argument("--vault", help="Path to your Obsidian vault", required=False)
     parser.add_argument("--query", help="Question to ask the vault", required=False)
-    parser.add_argument("--tags", help="Comma-separated list of tags to filter by", required=False)
     parser.add_argument("--filter", help="Filter by metadata field (format: field=value)", required=False, action="append")
     parser.add_argument("--ollama-status", action="store_true", help="Check Ollama server status")
     parser.add_argument("--start-ollama", action="store_true", help="Start Ollama server")
@@ -486,14 +481,13 @@ if __name__ == "__main__":
         if not check_ollama_running():
             print("Error: Ollama server is not running. Start it with --start-ollama")
             sys.exit(1)
-        filter_tags = args.tags.split(",") if args.tags else None
         filters = {}
         if args.filter:
             for f in args.filter:
                 field, value = f.split("=", 1)
                 filters[field] = value
-        query_vault(args.query, filter_tags, filters)
+        query_vault(args.query, filters)
     else:
-        print(f"Usage: {parser.prog} [--vault /path/to/obsidian] [--query 'your question' [--tags tag1,tag2] [--filter field=value]]")
+        print(f"Usage: {parser.prog} [--vault /path/to/obsidian] [--query 'your question' [--filter field=value]]")
         print("       [--ollama-status] [--start-ollama] [--stop-ollama]")
         sys.exit(1)

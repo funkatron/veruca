@@ -89,14 +89,27 @@ You can query your vault in several ways:
 ./obsidian.py --query "What do I know about project X?"
 ```
 
-2. **Query with Tag Filtering**
+2. **Query with Filters**
 ```sh
-./obsidian.py --query "What are my goals?" --tags goals,2024
+# Filter by tags
+./obsidian.py --query "What are my goals?" --filter tags=goals,2024
+
+# Filter by status
+./obsidian.py --query "What are my project tasks?" --filter status=in-progress
+
+# Filter by type
+./obsidian.py --query "What are my research findings?" --filter type=research
+
+# Multiple filters
+./obsidian.py --query "What are my active research projects?" --filter status=active --filter type=research
+
+# Combine tag and metadata filters
+./obsidian.py --query "What are my Python projects?" --filter tags=python --filter status=active
 ```
 
 The tool will:
 1. Load the stored embeddings and metadata
-2. Find the most relevant chunks for your query (filtered by tags if specified)
+2. Find the most relevant chunks for your query (filtered by specified criteria)
 3. Use the Mistral model to generate a response based on the relevant content
 4. Show the source documents and their metadata
 
@@ -109,14 +122,14 @@ Here are some example queries to demonstrate how to use the tool effectively:
 ./obsidian.py --query "What are my notes about Python programming?"
 ```
 
-2. **Using Tags to Filter**
+2. **Using Tag Filters**
 ```sh
-./obsidian.py --query "What are my project ideas?" --tags project,ideas
+./obsidian.py --query "What are my project ideas?" --filter tags=project,ideas
 ```
 
 3. **Combining Concepts**
 ```sh
-./obsidian.py --query "What do I know about machine learning in Python?" --tags python,ml
+./obsidian.py --query "What do I know about machine learning in Python?" --filter tags=python,ml
 ```
 
 4. **Finding Related Notes**
@@ -139,7 +152,7 @@ Here are some example queries to demonstrate how to use the tool effectively:
 ./obsidian.py --query "What are my active research projects?" --filter status=active --filter type=research
 
 # Combine with tags
-./obsidian.py --query "What are my Python projects?" --tags python --filter status=active
+./obsidian.py --query "What are my Python projects?" --filter tags=python --filter status=active
 ```
 
 6. **Viewing Source Documents and Metadata**
@@ -181,7 +194,7 @@ The tool processes the following Obsidian-specific features:
 3. **Tags**
    - Extracts all `#tag` instances
    - Includes tags in document metadata
-   - Allows filtering queries by tags
+   - Allows filtering queries by tags using `--filter tags=tag1,tag2`
 
 4. **Callouts**
    - Processes Obsidian's callout syntax (`> [!NOTE]`)
@@ -207,7 +220,7 @@ The tool processes the following Obsidian-specific features:
 
 5. **Query not returning results**
    - Try rephrasing your question
-   - Check if the relevant tags are correct
+   - Check if the relevant filters are correct
    - Verify that the information exists in your vault
 
 ## Contributing
