@@ -1,4 +1,6 @@
-# Obsidian Vault Query Tool
+# Veruca - Obsidian Vault Query Tool
+
+Named after Veruca Salt from "Charlie and the Chocolate Factory", Veruca is a demanding tool that gets exactly what you want from your Obsidian vault. Just like Veruca who always got her way, this tool helps you find exactly what you're looking for in your notes.
 
 This tool allows you to index and query your Obsidian vault using local embeddings and LLMs. It provides a simple way to search through your notes using natural language queries, while preserving Obsidian's unique features and metadata. **All data is processed locally, without sending any data to external servers.**
 
