@@ -124,7 +124,25 @@ Here are some example queries to demonstrate how to use the tool effectively:
 ./obsidian.py --query "What notes are related to my research on AI?"
 ```
 
-5. **Viewing Source Documents and Metadata**
+5. **Filtering by Metadata Fields**
+```sh
+# Filter by status
+./obsidian.py --query "What are my project tasks?" --filter status=in-progress
+
+# Filter by type
+./obsidian.py --query "What are my research findings?" --filter type=research
+
+# Filter by date
+./obsidian.py --query "What did I write about recently?" --filter date=2024-03
+
+# Multiple filters
+./obsidian.py --query "What are my active research projects?" --filter status=active --filter type=research
+
+# Combine with tags
+./obsidian.py --query "What are my Python projects?" --tags python --filter status=active
+```
+
+6. **Viewing Source Documents and Metadata**
 ```sh
 # Example response showing source documents and metadata:
 Answer: Based on your research notes, you've been exploring machine learning applications in healthcare.
