@@ -56,8 +56,21 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 def extract_tags(content: str) -> List[str]:
     """Extract Obsidian tags from content."""
 ```
-- Uses regex `#(\w+)` to find tags
-- Stores as metadata for filtering and organization
+- Uses a sophisticated regex pattern to find tags:
+  ```python
+  TAG_PATTERN = r'(?:^|\s|[^\w#])#([\w-]+(?:/[\w-]+)*)(?=(?:\s|[^\w#/]|/(?!\w)|#|$))'
+  ```
+  - Supports nested tags (`#project/active/2024`)
+  - Handles tags with numbers, hyphens, and underscores
+  - Correctly identifies tags in various contexts
+  - Ignores tags in code blocks and headings
+  - Avoids false positives in URLs and code
+- Comprehensive test suite in `tests/test_tag_patterns.py`
+  - Tests basic tag patterns
+  - Tests nested tags
+  - Tests edge cases and special characters
+  - Tests tags in various contexts
+  - Tests code block handling
 
 ##### Internal Link Processing (`obsidian.py:process_obsidian_links`)
 ```python
@@ -119,6 +132,18 @@ Features:
 - Efficient similarity search
 - Metadata filtering
 
+The tool uses a consistent storage location for all data:
+```python
+USER_DATA_DIR = os.path.expanduser("~/.local/share/veruca")
+CHROMA_DB_PATH = os.path.join(USER_DATA_DIR, "chroma")
+```
+
+Features:
+- Follows XDG Base Directory Specification
+- Persistent across sessions
+- Easy to backup and restore
+- Clear separation from vault data
+
 ### 5. Query Processing
 
 #### 5.1 Query Flow (`obsidian.py:query_vault`)
@@ -177,6 +202,33 @@ Features:
 - Context-aware responses
 - Source attribution
 - Confidence indication
+
+### 7. Testing
+
+The project includes a comprehensive test suite:
+
+#### Unit Tests
+- `tests/test_obsidian.py`: Core functionality tests
+- `tests/test_tag_patterns.py`: Tag extraction tests
+- `tests/test_comparison.py`: Comparison of pytest and unittest styles
+
+#### Test Features
+- Fixtures for common test data
+- Temporary file and directory handling
+- Mock objects for external dependencies
+- Parameterized tests for edge cases
+- Both pytest and unittest style examples
+
+Example test pattern:
+```python
+@pytest.mark.parametrize("test_input,expected", [
+    ("#tag", ["tag"]),
+    ("#project/active", ["project/active"]),
+    ("Text with #multiple #tags", ["multiple", "tags"])
+])
+def test_tag_pattern(test_input, expected):
+    assert find_tags(test_input) == expected
+```
 
 ## Technical Considerations
 
