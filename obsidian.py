@@ -12,7 +12,7 @@ from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
 from langchain_community.llms import Ollama
 from langchain.chains import RetrievalQA
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings
 from langchain.prompts import PromptTemplate
 
 # Define constants
