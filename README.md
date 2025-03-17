@@ -1,8 +1,6 @@
 # Veruca - Obsidian Vault Query Tool
 
-Named after the alternative rock band Veruca Salt, whose second album "8 Arms To Hold You" inspired this project. Just like the band's powerful and precise sound, this tool helps you get exactly what you want from your Obsidian vault with precision and efficiency.
-
-This tool allows you to index and query your Obsidian vault using local embeddings and LLMs. It provides a simple way to search through your notes using natural language queries, while preserving Obsidian's unique features and metadata. **All data is processed locally, without sending any data to external servers.**
+A powerful tool for indexing and querying your Obsidian vault using local embeddings and LLMs. It provides a simple way to search through your notes using natural language queries, while preserving Obsidian's unique features and metadata. **All data is processed locally, without sending any data to external servers.**
 
 ## Documentation
 
@@ -15,14 +13,14 @@ This tool allows you to index and query your Obsidian vault using local embeddin
 - Preserve and process Obsidian-specific features:
   - Internal links (`[[filename]]` and `[[filename|display text]]`)
   - Frontmatter (YAML metadata)
-  - Tags (`#tag`, `#nested/tag`, `#project/active/2024`)
+  - Tags (`#tag`)
   - Callouts (admonitions)
 - Index the content using local embeddings (nomic-embed-text model)
 - Query the indexed data using natural language
 - Filter queries by tags
 - View source documents and their metadata
 - **Local processing - no data is sent to external servers**
-- Persistent storage of embeddings in `~/.local/share/veruca`
+- Persistent storage of embeddings for faster subsequent queries
 
 ## Requirements
 
@@ -93,7 +91,7 @@ You can query your vault in several ways:
 
 2. **Query with Tag Filtering**
 ```sh
-./obsidian.py --query "What are my active projects?" --tags project/active,work/2024
+./obsidian.py --query "What are my goals?" --tags goals,2024
 ```
 
 The tool will:
@@ -145,10 +143,6 @@ The tool processes the following Obsidian-specific features:
 
 3. **Tags**
    - Extracts all `#tag` instances
-   - Supports nested tags (`#project/active`, `#area/work/tasks`)
-   - Handles tags with numbers, hyphens, and underscores
-   - Correctly identifies tags in various contexts (inline, lists, etc.)
-   - Ignores tags in code blocks and headings
    - Includes tags in document metadata
    - Allows filtering queries by tags
 
@@ -178,11 +172,6 @@ The tool processes the following Obsidian-specific features:
    - Try rephrasing your question
    - Check if the relevant tags are correct
    - Verify that the information exists in your vault
-
-6. **Storage location issues**
-   - The tool stores data in `~/.local/share/veruca`
-   - Ensure you have write permissions to this directory
-   - Check available disk space in this location
 
 ## Contributing
 
