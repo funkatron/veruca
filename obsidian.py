@@ -7,6 +7,7 @@ import re
 import yaml
 import subprocess
 import time
+import requests
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -229,10 +230,10 @@ def query_vault(question: str, filter_tags: List[str] = None) -> None:
 def check_ollama_running() -> bool:
     """Check if Ollama server is running."""
     try:
-        import requests
         response = requests.get(f"{OLLAMA_HOST}/api/tags")
         return response.status_code == 200
-    except requests.exceptions.ConnectionError:
+    except Exception as e:
+        print(f"Connection check failed: {type(e).__name__}: {str(e)}")
         return False
 
 def get_ollama_installation_type() -> Optional[str]:
@@ -242,7 +243,8 @@ def get_ollama_installation_type() -> Optional[str]:
         result = subprocess.run(["brew", "list", "ollama"], capture_output=True, text=True)
         if result.returncode == 0:
             return "brew"
-    except FileNotFoundError:
+    except Exception as e:
+        print(f"Brew check failed: {type(e).__name__}: {str(e)}")
         pass
 
     # Check for direct installation
@@ -276,8 +278,11 @@ def start_ollama() -> bool:
 
         print("Error: Ollama server failed to start.")
         return False
-    except subprocess.CalledProcessError as e:
-        print(f"Error starting Ollama: {str(e)}")
+    except Exception as e:
+        import traceback
+        print(f"Error starting Ollama: {type(e).__name__}: {str(e)}")
+        print("Stack trace:")
+        print(traceback.format_exc())
         return False
 
 def stop_ollama() -> bool:
@@ -289,13 +294,20 @@ def stop_ollama() -> bool:
 
     try:
         if install_type == "brew":
-            subprocess.run(["brew", "services", "stop", "ollama"], check=True)
-        else:
-            # For direct installation, find and kill the process
+            try:
+                subprocess.run(["brew", "services", "stop", "ollama"], check=True)
+            except Exception as e:
+                print(f"Brew stop failed: {type(e).__name__}: {str(e)}")
+                # Try direct method as fallback
+                install_type = "direct"
+
+        if install_type == "direct":
             try:
                 subprocess.run(["pkill", "ollama"], check=True)
-            except subprocess.CalledProcessError:
-                pass  # Process might not exist
+            except Exception as e:
+                print(f"Process kill failed: {type(e).__name__}: {str(e)}")
+                # Both methods failed
+                return False
 
         # Wait for server to stop
         for _ in range(10):  # Try for 10 seconds
@@ -306,8 +318,11 @@ def stop_ollama() -> bool:
 
         print("Error: Ollama server failed to stop.")
         return False
-    except subprocess.CalledProcessError as e:
-        print(f"Error stopping Ollama: {str(e)}")
+    except Exception as e:
+        import traceback
+        print(f"Error stopping Ollama: {type(e).__name__}: {str(e)}")
+        print("Stack trace:")
+        print(traceback.format_exc())
         return False
 
 def check_ollama_status() -> None:
