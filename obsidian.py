@@ -11,9 +11,9 @@ import requests
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain.schema import Document
-from langchain_community.llms import Ollama
+from langchain_ollama import OllamaLLM
 from langchain.chains import RetrievalQA
 from langchain_ollama import OllamaEmbeddings
 from langchain.prompts import PromptTemplate
@@ -36,10 +36,9 @@ If you're not sure about something, say so. Don't make up information that isn't
 
 Answer:"""
 
-def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
+def parse_frontmatter(content: str) -> Dict[str, Any]:
     """Parse YAML frontmatter from markdown content."""
     frontmatter = {}
-    content_without_frontmatter = content
 
     # Check for frontmatter pattern - more lenient pattern
     frontmatter_pattern = r'^---\n(.*?)\n---'  # Removed \s* and final \n
@@ -47,7 +46,14 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 
     if match:
         try:
-            print(f"Attempting to parse YAML: {match.group(1)}")  # Debug print
+            yaml_content = match.group(1)
+            print(f"Attempting to parse YAML: {yaml_content}")  # Debug print
+
+            # Skip if content looks like a template
+            if '{{' in yaml_content or '}}' in yaml_content:
+                print("Skipping template-like YAML content")
+                return {}
+
             # Use yaml.safe_load with a custom constructor to preserve date strings
             class PreserveDateStrings(yaml.SafeLoader):
                 @classmethod
@@ -61,31 +67,28 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 
             # Remove the default date/time resolver
             PreserveDateStrings.remove_implicit_resolver('tag:yaml.org,2002:timestamp')
-            frontmatter = yaml.load(match.group(1), Loader=PreserveDateStrings)
-            if frontmatter is None:
-                frontmatter = {}
-            content_without_frontmatter = content[match.end():]
+            parsed = yaml.load(yaml_content, Loader=PreserveDateStrings)
+            if parsed is not None:
+                frontmatter = parsed
         except yaml.YAMLError as e:
-            print(f"Error: Invalid YAML frontmatter: {str(e)}")
-            raise SystemExit(1)
+            print(f"Warning: Invalid YAML frontmatter, skipping: {str(e)}")
         except Exception as e:
-            print(f"Unexpected error: {str(e)}")
-            raise SystemExit(1)
+            print(f"Warning: Error parsing frontmatter, skipping: {str(e)}")
 
-    return frontmatter, content_without_frontmatter
+    return frontmatter
 
 def extract_tags(content: str) -> List[str]:
-    """Extract Obsidian inline tags from content."""
-    # Remove YAML frontmatter if present
-    _, content_without_frontmatter = parse_frontmatter(content)
-    # Find all #tag occurrences that are preceded by whitespace, start of line, or punctuation
-    # and not part of a larger word (i.e., not followed by a word character)
+    """Extract Obsidian inline tags from content.
+    Only matches explicit #tag patterns, not words that happen to contain 'tag'.
+    """
+    # Find all #tag occurrences that:
+    # 1. Start with # followed by a word character
+    # 2. Are not part of a larger word (no word chars before or after)
+    # 3. Are not inside code blocks or URLs
     tags = []
-    for match in re.finditer(r'(?:^|\s|[^\w#])#(\w+)(?!\w)', content_without_frontmatter):
+    for match in re.finditer(r'(?:^|\s|[^\w#])#(\w+)(?!\w)', content):
         tag = match.group(1)
-        # Skip the word "tags" as it's not a real tag
-        if tag != "tags":
-            tags.append(tag)
+        tags.append(tag)
     return list(set(tags))
 
 def process_obsidian_links(content: str, vault_path: str) -> str:
@@ -112,43 +115,55 @@ def process_callouts(content: str) -> str:
     return re.sub(r'>\s*\[!(\w+)\]\s*(.*?)(?=\n|$)', process_callout, content)
 
 def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]]:
-    """Load all Markdown files from the given vault path with Obsidian-specific processing."""
-    if not os.path.exists(vault_path):
-        print(f"Error: Vault path '{vault_path}' does not exist.")
-        raise SystemExit(1)
+    """Load and process all markdown files in the vault."""
+    vault_dir = Path(vault_path)
+    markdown_files = []
 
-    documents = []
-    try:
-        for root, _, files in os.walk(vault_path):
-            for file in files:
-                if file.endswith('.md'):
-                    try:
-                        file_path = os.path.join(root, file)
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        frontmatter, content_without_frontmatter = parse_frontmatter(content)
-                        tags = extract_tags(content)
-                        # Merge frontmatter tags with inline tags
-                        if 'tags' in frontmatter:
-                            tags.extend(frontmatter['tags'])
-                        # Convert list of tags to comma-separated string
-                        frontmatter['tags'] = ','.join(sorted(set(tags)))
-                        # Add source and path metadata
-                        frontmatter['source'] = file
-                        frontmatter['path'] = str(Path(file_path).relative_to(vault_path))
-                        # Convert any remaining lists to strings
-                        for key, value in frontmatter.items():
-                            if isinstance(value, list):
-                                frontmatter[key] = ','.join(map(str, value))
-                        documents.append((file, frontmatter, content_without_frontmatter))
-                    except Exception as e:
-                        print(f"Error processing {file_path}: {str(e)}")
-                        raise SystemExit(1)
-    except Exception as e:
-        print(f"Error walking through vault: {str(e)}")
-        raise SystemExit(1)
+    # Get all markdown files recursively
+    for md_file in vault_dir.rglob("*.md"):
+        try:
+            with open(md_file, "r", encoding="utf-8") as f:
+                content = f.read()
 
-    return documents
+            # Parse frontmatter
+            frontmatter = parse_frontmatter(content)
+            print(f"Attempting to parse YAML: {frontmatter}")
+
+            # Extract inline tags
+            inline_tags = extract_tags(content)
+
+            # Merge frontmatter tags with inline tags
+            all_tags = set()
+            if "tags" in frontmatter:
+                if isinstance(frontmatter["tags"], list):
+                    all_tags.update(frontmatter["tags"])
+                else:
+                    all_tags.add(frontmatter["tags"])
+            all_tags.update(inline_tags)
+
+            # Add source and path metadata
+            metadata = {
+                "source": md_file.name,
+                "path": str(md_file.relative_to(vault_dir)),
+                "tags": list(all_tags)  # Store as a list
+            }
+
+            # Add any remaining frontmatter fields
+            for key, value in frontmatter.items():
+                if key != "tags":
+                    metadata[key] = value
+
+            # Process Obsidian-specific features
+            processed_content = process_obsidian_links(content, vault_dir)
+            processed_content = process_callouts(processed_content)
+
+            markdown_files.append((str(md_file), metadata, processed_content))
+
+        except Exception as e:
+            print(f"Error processing {md_file}: {str(e)}")
+            continue
+
+    return markdown_files
 
 def index_vault(vault_path: str) -> None:
     """Index all markdown files in the vault."""
@@ -159,17 +174,30 @@ def index_vault(vault_path: str) -> None:
 
         # Process documents
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-        documents = [Document(page_content=chunk, metadata=metadata)
-                    for _, metadata, text in markdown_data
-                    for chunk in text_splitter.split_text(text)]
+        documents = []
+        for _, metadata, text in markdown_data:
+            # Convert tags list to CSV string for Chroma storage
+            if "tags" in metadata:
+                if isinstance(metadata["tags"], list):
+                    metadata["tags"] = ','.join(metadata["tags"])
+                elif not isinstance(metadata["tags"], str):
+                    metadata["tags"] = str(metadata["tags"])
+
+            # Create documents for each chunk
+            for chunk in text_splitter.split_text(text):
+                doc = Document(page_content=chunk, metadata=metadata.copy())
+                documents.append(doc)
+
+        print("Document metadata examples:")
+        for doc in documents[:2]:  # Print first two documents' metadata
+            print(f"Metadata: {doc.metadata}")
 
         # Create vector store
         vectorstore = Chroma.from_documents(
             documents=documents,
-            embedding=OllamaEmbeddings(model="llama2"),
+            embedding=OllamaEmbeddings(model="nomic-embed-text"),
             persist_directory="./data/chroma"
         )
-        vectorstore.persist()
         print("Indexing complete.")
     except Exception as e:
         print(f"Error processing documents: {str(e)}")
@@ -190,24 +218,41 @@ def query_vault(query: str, filter_tags: List[str] = None, test_mode: bool = Fal
         if test_mode:
             return f"Mock response for query: {query} with tags: {filter_tags}"
 
-        embedding_model = OllamaEmbeddings(model="llama2")
+        print(f"Querying with: {query}, filter_tags: {filter_tags}")
+        embedding_model = OllamaEmbeddings(model="nomic-embed-text")
+        print("Created embedding model")
         vector_store = Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embedding_model)
+        print("Created vector store")
 
-        # Create filter dict if tags are provided
-        filter_dict = {"tags": {"$in": filter_tags}} if filter_tags else None
+        # Get all documents first
+        docs = vector_store.similarity_search(query)
+        print(f"Found {len(docs)} relevant documents")
 
-        # Get relevant documents
-        docs = vector_store.similarity_search(query, filter=filter_dict)
+        # Filter documents by tags if specified
+        if filter_tags:
+            filtered_docs = []
+            for doc in docs:
+                doc_tags = doc.metadata.get("tags", "").split(",")
+                if any(tag in doc_tags for tag in filter_tags):
+                    filtered_docs.append(doc)
+            docs = filtered_docs
+            print(f"After tag filtering: {len(docs)} documents")
+
+        for doc in docs:
+            print(f"Document metadata: {doc.metadata}")
 
         # Create QA chain
         qa_chain = RetrievalQA.from_chain_type(
-            llm=Ollama(model="llama2"),
+            llm=OllamaLLM(model="mistral"),
             chain_type="stuff",
             retriever=vector_store.as_retriever()
         )
+        print("Created QA chain")
 
         # Get response
         response = qa_chain.invoke({"query": query})
+        print("Got response")
+        print(response["result"])
         return response["result"]
 
     except Exception as e:
