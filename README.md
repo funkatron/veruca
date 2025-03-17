@@ -1,6 +1,6 @@
 # Veruca - Obsidian Vault Query Tool
 
-Named after Veruca Salt from "Charlie and the Chocolate Factory", Veruca is a demanding tool that gets exactly what you want from your Obsidian vault. Just like Veruca who always got her way, this tool helps you find exactly what you're looking for in your notes.
+Named after the alternative rock band Veruca Salt, whose second album "8 Arms To Hold You" inspired this project. Just like the band's powerful and precise sound, this tool helps you get exactly what you want from your Obsidian vault with precision and efficiency.
 
 This tool allows you to index and query your Obsidian vault using local embeddings and LLMs. It provides a simple way to search through your notes using natural language queries, while preserving Obsidian's unique features and metadata. **All data is processed locally, without sending any data to external servers.**
 
