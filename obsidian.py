@@ -5,6 +5,8 @@ import argparse
 import sys
 import re
 import yaml
+import subprocess
+import time
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -17,6 +19,7 @@ from langchain.prompts import PromptTemplate
 
 # Define constants
 CHROMA_DB_PATH = "./chroma_db"
+OLLAMA_HOST = "http://localhost:11434"
 
 # Custom prompt template for better context
 CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
@@ -223,19 +226,134 @@ def query_vault(question: str, filter_tags: List[str] = None) -> None:
         print(f"Error during query: {str(e)}")
         sys.exit(1)
 
+def check_ollama_running() -> bool:
+    """Check if Ollama server is running."""
+    try:
+        import requests
+        response = requests.get(f"{OLLAMA_HOST}/api/tags")
+        return response.status_code == 200
+    except requests.exceptions.ConnectionError:
+        return False
+
+def get_ollama_installation_type() -> Optional[str]:
+    """Determine how Ollama is installed (brew or direct)."""
+    # Check for Homebrew installation
+    try:
+        result = subprocess.run(["brew", "list", "ollama"], capture_output=True, text=True)
+        if result.returncode == 0:
+            return "brew"
+    except FileNotFoundError:
+        pass
+
+    # Check for direct installation
+    if os.path.exists("/usr/local/bin/ollama") or os.path.exists("/opt/homebrew/bin/ollama"):
+        return "direct"
+
+    return None
+
+def start_ollama() -> bool:
+    """Start the Ollama server."""
+    install_type = get_ollama_installation_type()
+    if not install_type:
+        print("Error: Ollama is not installed. Please install it first from https://ollama.com/download")
+        return False
+
+    try:
+        if install_type == "brew":
+            subprocess.run(["brew", "services", "start", "ollama"], check=True)
+        else:
+            # For direct installation, start in background
+            subprocess.Popen(["ollama", "serve"],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+
+        # Wait for server to start
+        for _ in range(10):  # Try for 10 seconds
+            if check_ollama_running():
+                print("Ollama server started successfully.")
+                return True
+            time.sleep(1)
+
+        print("Error: Ollama server failed to start.")
+        return False
+    except subprocess.CalledProcessError as e:
+        print(f"Error starting Ollama: {str(e)}")
+        return False
+
+def stop_ollama() -> bool:
+    """Stop the Ollama server."""
+    install_type = get_ollama_installation_type()
+    if not install_type:
+        print("Error: Ollama is not installed.")
+        return False
+
+    try:
+        if install_type == "brew":
+            subprocess.run(["brew", "services", "stop", "ollama"], check=True)
+        else:
+            # For direct installation, find and kill the process
+            try:
+                subprocess.run(["pkill", "ollama"], check=True)
+            except subprocess.CalledProcessError:
+                pass  # Process might not exist
+
+        # Wait for server to stop
+        for _ in range(10):  # Try for 10 seconds
+            if not check_ollama_running():
+                print("Ollama server stopped successfully.")
+                return True
+            time.sleep(1)
+
+        print("Error: Ollama server failed to stop.")
+        return False
+    except subprocess.CalledProcessError as e:
+        print(f"Error stopping Ollama: {str(e)}")
+        return False
+
+def check_ollama_status() -> None:
+    """Check and display Ollama server status."""
+    if check_ollama_running():
+        print("Ollama server is running.")
+        install_type = get_ollama_installation_type()
+        if install_type:
+            print(f"Installation type: {install_type}")
+    else:
+        print("Ollama server is not running.")
+        install_type = get_ollama_installation_type()
+        if install_type:
+            print(f"Installation type: {install_type}")
+        else:
+            print("Ollama is not installed. Please install it from https://ollama.com/download")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Query your Obsidian vault using Ollama.")
     parser.add_argument("--vault", help="Path to your Obsidian vault", required=False)
     parser.add_argument("--query", help="Question to ask the vault", required=False)
     parser.add_argument("--tags", help="Comma-separated list of tags to filter by", required=False)
+    parser.add_argument("--ollama-status", action="store_true", help="Check Ollama server status")
+    parser.add_argument("--start-ollama", action="store_true", help="Start Ollama server")
+    parser.add_argument("--stop-ollama", action="store_true", help="Stop Ollama server")
 
     args = parser.parse_args()
 
-    if args.vault:
+    if args.ollama_status:
+        check_ollama_status()
+    elif args.start_ollama:
+        start_ollama()
+    elif args.stop_ollama:
+        stop_ollama()
+    elif args.vault:
+        if not check_ollama_running():
+            print("Error: Ollama server is not running. Start it with --start-ollama")
+            sys.exit(1)
         index_vault(args.vault)
     elif args.query:
+        if not check_ollama_running():
+            print("Error: Ollama server is not running. Start it with --start-ollama")
+            sys.exit(1)
         filter_tags = args.tags.split(",") if args.tags else None
         query_vault(args.query, filter_tags)
     else:
-        print(f"Usage: {parser.prog} --vault /path/to/obsidian OR --query 'your question' [--tags tag1,tag2]")
+        print(f"Usage: {parser.prog} [--vault /path/to/obsidian] [--query 'your question' [--tags tag1,tag2]]")
+        print("       [--ollama-status] [--start-ollama] [--stop-ollama]")
         sys.exit(1)
