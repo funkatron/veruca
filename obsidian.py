@@ -19,8 +19,8 @@ from langchain_ollama import OllamaEmbeddings
 from langchain.prompts import PromptTemplate
 
 # Define constants
-CHROMA_DB_PATH = "./chroma_db"
-OLLAMA_HOST = "http://localhost:11434"
+CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./data/chroma")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # Custom prompt template for better context
 CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
@@ -131,10 +131,15 @@ def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]
                         # Merge frontmatter tags with inline tags
                         if 'tags' in frontmatter:
                             tags.extend(frontmatter['tags'])
-                        frontmatter['tags'] = list(set(tags))
+                        # Convert list of tags to comma-separated string
+                        frontmatter['tags'] = ','.join(sorted(set(tags)))
                         # Add source and path metadata
                         frontmatter['source'] = file
                         frontmatter['path'] = str(Path(file_path).relative_to(vault_path))
+                        # Convert any remaining lists to strings
+                        for key, value in frontmatter.items():
+                            if isinstance(value, list):
+                                frontmatter[key] = ','.join(map(str, value))
                         documents.append((file, frontmatter, content_without_frontmatter))
                     except Exception as e:
                         print(f"Error processing {file_path}: {str(e)}")
@@ -170,58 +175,40 @@ def index_vault(vault_path: str) -> None:
         print(f"Error processing documents: {str(e)}")
         raise SystemExit(1)
 
-def query_vault(question: str, filter_tags: List[str] = None) -> None:
-    """Query the indexed data with a question and optional tag filtering."""
-    if not os.path.exists(CHROMA_DB_PATH):
-        print("Error: No indexed data found. Please index your vault first using --vault.")
-        sys.exit(1)
+def query_vault(query: str, filter_tags: List[str] = None, test_mode: bool = False) -> str:
+    """Query the vault with a natural language query and optional tag filters.
 
+    Args:
+        query: The natural language query
+        filter_tags: Optional list of tags to filter results by
+        test_mode: If True, return a mock response for testing
+
+    Returns:
+        str: The response from the LLM
+    """
     try:
-        embedding_model = OllamaEmbeddings(model="nomic-embed-text")
+        if test_mode:
+            return f"Mock response for query: {query} with tags: {filter_tags}"
+
+        embedding_model = OllamaEmbeddings(model="llama2")
         vector_store = Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embedding_model)
 
-        # Configure retriever with metadata filtering if tags are provided
-        search_kwargs = {}
-        if filter_tags:
-            search_kwargs["filter"] = {"tags": {"$in": filter_tags}}
+        # Create filter dict if tags are provided
+        filter_dict = {"tags": {"$in": filter_tags}} if filter_tags else None
 
-        retriever = vector_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"k": 4, "score_threshold": 0.5}
-        )
+        # Get relevant documents
+        docs = vector_store.similarity_search(query, filter=filter_dict)
 
-        llm = Ollama(model="mistral")
-
-        # Create custom prompt
-        prompt = PromptTemplate(
-            template=CUSTOM_PROMPT,
-            input_variables=["context", "question"]
-        )
-
+        # Create QA chain
         qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
+            llm=Ollama(model="llama2"),
             chain_type="stuff",
-            retriever=retriever,
-            chain_type_kwargs={"prompt": prompt}
+            retriever=vector_store.as_retriever()
         )
 
-        response = qa_chain.run(question)
-
-        print("\n🔍 Answer:")
-        print(response)
-
-        # Show source documents if available
-        docs = retriever.get_relevant_documents(question)
-        if docs:
-            print("\n📚 Sources:")
-            for doc in docs:
-                source = doc.metadata.get("source", "Unknown")
-                path = doc.metadata.get("path", "Unknown")
-                tags = doc.metadata.get("tags", [])
-                print(f"- {source} ({path})")
-                if tags:
-                    print(f"  Tags: {', '.join(tags)}")
-                print()
+        # Get response
+        response = qa_chain.invoke({"query": query})
+        return response["result"]
 
     except Exception as e:
         print(f"Error during query: {str(e)}")
