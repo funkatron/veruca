@@ -11,15 +11,20 @@ import requests
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_chroma import Chroma
-from langchain.schema import Document
-from langchain_ollama import OllamaLLM
+from langchain_community.embeddings import OllamaEmbeddings
+from langchain_community.llms import OllamaLLM
+from langchain_community.vectorstores import Chroma
 from langchain.chains import RetrievalQA
-from langchain_ollama import OllamaEmbeddings
 from langchain.prompts import PromptTemplate
 
+# Get the user's data directory
+USER_DATA_DIR = os.path.expanduser("~/.local/share/veruca")
+CHROMA_DB_PATH = os.path.join(USER_DATA_DIR, "chroma")
+
+# Ensure the data directory exists
+os.makedirs(USER_DATA_DIR, exist_ok=True)
+
 # Define constants
-CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./data/chroma")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # Custom prompt template for better context
@@ -196,7 +201,7 @@ def index_vault(vault_path: str) -> None:
         vectorstore = Chroma.from_documents(
             documents=documents,
             embedding=OllamaEmbeddings(model="nomic-embed-text"),
-            persist_directory="./data/chroma"
+            persist_directory=CHROMA_DB_PATH
         )
         print("Indexing complete.")
     except Exception as e:
