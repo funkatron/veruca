@@ -142,37 +142,29 @@ def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]
     return documents
 
 def index_vault(vault_path: str) -> None:
-    """Process and index Markdown files from the vault."""
+    """Index all markdown files in the vault."""
     print("Loading Markdown files...")
-    markdown_data = load_markdown_files(vault_path)
-
-    if not markdown_data:
-        print("No Markdown files found in the vault.")
-        sys.exit(1)
-
-    print(f"Loaded {len(markdown_data)} Markdown files.")
-
     try:
-        # Chunk text
+        markdown_data = load_markdown_files(vault_path)
+        print(f"Loaded {len(markdown_data)} Markdown files.")
+
+        # Process documents
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         documents = [Document(page_content=chunk, metadata=metadata)
-                     for metadata, text in markdown_data
-                     for chunk in text_splitter.split_text(text)]
+                    for _, metadata, text in markdown_data
+                    for chunk in text_splitter.split_text(text)]
 
-        print(f"Split into {len(documents)} chunks.")
-
-        # Store embeddings in ChromaDB using local Ollama embeddings
-        try:
-            embedding_model = OllamaEmbeddings(model="nomic-embed-text")
-            vector_store = Chroma.from_documents(documents, embedding=embedding_model, persist_directory=CHROMA_DB_PATH)
-            vector_store.persist()
-            print("Vault indexed successfully.")
-        except Exception as e:
-            print(f"Error during embedding or storage: {str(e)}")
-            sys.exit(1)
+        # Create vector store
+        vectorstore = Chroma.from_documents(
+            documents=documents,
+            embedding=OllamaEmbeddings(model="llama2"),
+            persist_directory="./data/chroma"
+        )
+        vectorstore.persist()
+        print("Indexing complete.")
     except Exception as e:
         print(f"Error processing documents: {str(e)}")
-        sys.exit(1)
+        raise SystemExit(1)
 
 def query_vault(question: str, filter_tags: List[str] = None) -> None:
     """Query the indexed data with a question and optional tag filtering."""
