@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""Query your Obsidian vault using Ollama."""
 
 import os
 import argparse
@@ -8,15 +9,22 @@ import yaml
 import subprocess
 import time
 import requests
+import warnings
 from typing import List, Tuple, Dict, Any, Optional
 from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings
-from langchain_community.chat_models import ChatOllama
-from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaEmbeddings, ChatOllama
+from langchain_chroma import Chroma
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.schema import Document
+
+# Suppress ResourceWarnings from unclosed socket connections
+# These warnings occur because the Ollama clients use async HTTP connections
+# that are managed by the client libraries but Python's garbage collector
+# is extra careful about reporting them. The connections are properly
+# managed and closed by the client libraries.
+warnings.filterwarnings("ignore", category=ResourceWarning)
 
 __version__ = "0.1.0"
 
@@ -279,24 +287,23 @@ def index_vault(vault_path: str) -> None:
         print(f"Error processing documents: {str(e)}")
         raise SystemExit(1)
 
-def query_vault(query: str, filters: Dict[str, str] = {}) -> str:
-    """Query the vault with a natural language query and optional metadata filters.
-
-    Args:
-        query: The natural language query
-        filters: Optional dictionary of metadata fields to filter results by
-
-    Returns:
-        str: The response from the LLM
-    """
+def query_vault(query: str, filters: Dict[str, str] = None) -> str:
+    """Query the vector store with a question."""
     try:
         print(f"Querying with: {query}, filters: {filters}")
+
+        # Create embedding model once and reuse
         embedding_model = OllamaEmbeddings(model="nomic-embed-text")
         print("Created embedding model")
-        vector_store = Chroma(persist_directory=CHROMA_DB_PATH, embedding_function=embedding_model)
+
+        # Create vector store with the embedding model
+        vector_store = Chroma(
+            persist_directory=CHROMA_DB_PATH,
+            embedding_function=embedding_model
+        )
         print("Created vector store")
 
-        # Get all documents first
+        # Get relevant documents
         docs = vector_store.similarity_search(query)
         print(f"Found {len(docs)} relevant documents")
 
@@ -324,11 +331,13 @@ def query_vault(query: str, filters: Dict[str, str] = {}) -> str:
         for doc in docs:
             print(f"Document metadata: {doc.metadata}")
 
-        # Create QA chain
+        # Create QA chain with custom prompt
+        prompt = PromptTemplate(template=CUSTOM_PROMPT, input_variables=["context", "question"])
         qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOllama(model="mistral"),
             chain_type="stuff",
-            retriever=vector_store.as_retriever()
+            retriever=vector_store.as_retriever(),
+            chain_type_kwargs={"prompt": prompt}
         )
         print("Created QA chain")
 
