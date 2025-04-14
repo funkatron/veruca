@@ -5,22 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2024-03-17
+## [0.3.0] - 2024-04-14
 
 ### Added
-- Alpha release of Veruca - Obsidian Vault Query Tool
-- Support for processing Obsidian vault files recursively
-- Obsidian-specific feature support:
-  - Internal links (`[[filename]]` and `[[filename|display text]]`)
-  - Frontmatter (YAML metadata)
-  - Tags (`#tag` and nested tags `#tag/subtag`)
-  - Callouts (admonitions)
-- Local embedding generation using nomic-embed-text model
-- Natural language querying with tag filtering
-- Persistent storage of embeddings using ChromaDB
-- Comprehensive test suite with 66+ test cases
-- Ollama server management commands
-- User-friendly error messages and documentation
+- New `DataSource` abstract base class for implementing different data sources
+- Improved type hints throughout the codebase
+- Better error handling with specific exception types
+- Constants for default configuration values
+
+### Changed
+- Restructured code into core and sources packages
+- Improved path handling using `pathlib.Path` consistently
+- Enhanced docstrings with `:param`, `:return`, and `:raises` format
+- Simplified and cleaned up code organization
+- Improved error messages with more context
+
+### Fixed
+- Type inconsistencies in document loading
+- Path handling inconsistencies
+- Duplicate code in query and indexing
+- Unused methods and redundant code
+
+## [0.2.0] - 2024-03-17
+
+### Added
+- Support for filtering query results by metadata
+- Improved error handling and user feedback
+- Better documentation and examples
+
+### Changed
+- Updated dependencies to latest versions
+- Improved code organization and structure
+- Enhanced type hints and documentation
+
+### Fixed
+- Resource warnings from Ollama clients
+- Various minor bugs and issues
+
+## [0.1.0] - 2024-03-11
+
+### Added
+- Initial release
+- Basic Obsidian vault querying functionality
+- Support for local LLMs via Ollama
+- Document indexing and vector search
+- Command-line interface
 
 ### Notes
 - This is an alpha release. The API and features are not yet stable and may change in future versions.
