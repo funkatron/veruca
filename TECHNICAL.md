@@ -4,13 +4,20 @@ This document provides a detailed technical explanation of how the Obsidian Vaul
 
 ## Architecture Overview
 
-The tool is built using several key components, all implemented in `obsidian.py`:
+The tool is built using a modular architecture with clear separation of concerns:
 
-1. **Document Processing Pipeline** (`obsidian.py:1-250`)
-2. **Embedding Generation** (`obsidian.py:251-300`)
-3. **Vector Storage** (`obsidian.py:301-350`)
-4. **Query Processing** (`obsidian.py:351-400`)
-5. **Response Generation** (`obsidian.py:401-450`)
+1. 🔵 **Core Components** (`src/veruca/core/`)
+   - Base classes and interfaces
+   - Common utilities
+   - Embedding functionality
+
+2. 🟢 **Data Sources** (`src/veruca/sources/`)
+   - Obsidian integration
+   - Extensible for other sources
+
+3. 🟡 **Document Processing** (`src/veruca/sources/obsidian/parser.py`)
+4. 🟣 **Query Handling** (`src/veruca/sources/obsidian/query.py`)
+5. 🔴 **Vector Storage and Search** (`src/veruca/core/embeddings.py`)
 
 Here's how these components work together:
 
@@ -24,13 +31,43 @@ graph TD
     G --> H[Vector Search]
     H --> I[Response Generation]
     E --> H
+
+    style A fill:#2196f3,stroke:#333,stroke-width:2px,color:#fff
+    style B fill:#ffeb3b,stroke:#333,stroke-width:2px,color:#000
+    style C fill:#ffeb3b,stroke:#333,stroke-width:2px,color:#000
+    style D fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+    style F fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
+    style G fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
+    style H fill:#f44336,stroke:#333,stroke-width:2px,color:#fff
+    style I fill:#9c27b0,stroke:#333,stroke-width:2px,color:#fff
 ```
 
 ## Component Details
 
-### 1. Document Processing Pipeline
+### 1. Core Components
 
-#### 1.1 File Loading (`obsidian.py:load_markdown_files`)
+#### 1.1 Base Classes (`core/base.py`)
+```python
+class DataSource(ABC):
+    """Abstract base class for data sources."""
+```
+- Defines interface for data sources
+- Ensures consistent behavior
+- Enables easy extension
+
+#### 1.2 Embedding Utilities (`core/embeddings.py`)
+```python
+class EmbeddingGenerator:
+    """Handles embedding generation and vector operations."""
+```
+- Manages embedding models
+- Handles vector operations
+- Provides common functionality
+
+### 2. Document Processing Pipeline
+
+#### 2.1 File Loading (`sources/obsidian/parser.py:load_markdown_files`)
 ```python
 def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]]:
     """Load all Markdown files from the given vault path with Obsidian-specific processing."""
@@ -39,10 +76,10 @@ def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]
 - Handles file encoding and error cases
 - Preserves file structure and relationships
 
-#### 1.2 Obsidian Feature Processing
+#### 2.2 Obsidian Feature Processing
 The tool processes several Obsidian-specific features in separate functions:
 
-##### Frontmatter Parsing (`obsidian.py:parse_frontmatter`)
+##### Frontmatter Parsing (`sources/obsidian/parser.py:parse_frontmatter`)
 ```python
 def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     """Parse Obsidian's YAML frontmatter if present."""
@@ -51,7 +88,7 @@ def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 - Parses using PyYAML library
 - Stores as metadata for each document
 
-##### Tag Extraction (`obsidian.py:extract_tags`)
+##### Tag Extraction (`sources/obsidian/parser.py:extract_tags`)
 ```python
 def extract_tags(content: str) -> List[str]:
     """Extract Obsidian tags from content."""
@@ -59,7 +96,7 @@ def extract_tags(content: str) -> List[str]:
 - Uses regex `#(\w+)` to find tags
 - Stores as metadata for filtering and organization
 
-##### Internal Link Processing (`obsidian.py:process_obsidian_links`)
+##### Internal Link Processing (`sources/obsidian/parser.py:process_obsidian_links`)
 ```python
 def process_obsidian_links(content: str, vault_path: str) -> str:
     """Process Obsidian's internal links and convert them to readable text."""
@@ -68,7 +105,7 @@ def process_obsidian_links(content: str, vault_path: str) -> str:
 - Preserves display text when available
 - Maintains document relationships
 
-##### Callout Processing (`obsidian.py:process_callouts`)
+##### Callout Processing (`sources/obsidian/parser.py:process_callouts`)
 ```python
 def process_callouts(content: str) -> str:
     """Process Obsidian's callouts (admonitions) to make them more readable."""
@@ -76,7 +113,7 @@ def process_callouts(content: str) -> str:
 - Converts to readable format
 - Preserves callout type and content
 
-### 2. Text Chunking
+### 3. Text Chunking
 
 The tool uses LangChain's `RecursiveCharacterTextSplitter` in `index_vault()`:
 ```python
@@ -91,7 +128,7 @@ Benefits:
 - Optimizes for embedding model input size
 - Preserves document structure
 
-### 3. Embedding Generation
+### 4. Embedding Generation
 
 Uses Ollama's `nomic-embed-text` model in both indexing and querying:
 ```python
@@ -103,7 +140,7 @@ Key features:
 - High-quality embeddings
 - Fast processing
 
-### 4. Vector Storage
+### 5. Vector Storage
 
 Uses ChromaDB for vector storage and retrieval in `index_vault()`:
 ```python
@@ -119,9 +156,9 @@ Features:
 - Efficient similarity search
 - Metadata filtering
 
-### 5. Query Processing
+### 6. Query Processing
 
-#### 5.1 Query Flow (`obsidian.py:query_vault`)
+#### 6.1 Query Flow (`sources/obsidian/query.py:query_vault`)
 ```python
 def query_vault(question: str, filter_tags: List[str] = None) -> None:
     """Query the indexed data with a question and optional tag filtering."""
@@ -132,7 +169,7 @@ def query_vault(question: str, filter_tags: List[str] = None) -> None:
 4. Relevant documents retrieved
 5. Response generated
 
-#### 5.2 Tag Filtering
+#### 6.2 Tag Filtering
 ```python
 if filter_tags:
     search_kwargs["filter"] = {"tags": {"$in": filter_tags}}
@@ -141,7 +178,7 @@ if filter_tags:
 - Uses ChromaDB's metadata filtering
 - Supports multiple tags
 
-#### 5.3 Similarity Search
+#### 6.3 Similarity Search
 ```python
 retriever = vector_store.as_retriever(
     search_type="similarity_score_threshold",
@@ -155,9 +192,9 @@ retriever = vector_store.as_retriever(
 - Filters by similarity threshold
 - Balances relevance and coverage
 
-### 6. Response Generation
+### 7. Response Generation
 
-Uses Ollama's Mistral model with a custom prompt defined at the top of the file:
+Uses Ollama's Mistral model with a custom prompt defined in `sources/obsidian/query.py`:
 ```python
 CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
 The context comes from various notes, and each piece of information includes metadata about its source.
@@ -215,7 +252,7 @@ Features:
 ### 4. Extensibility
 
 The architecture supports:
-- Adding new Obsidian features
+- Adding new data sources through the `DataSource` interface
 - Different embedding models
 - Alternative vector stores
 - Custom response formats
