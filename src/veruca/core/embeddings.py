@@ -9,21 +9,21 @@ from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_ollama import OllamaEmbeddings
-from langchain.chains import RetrievalQA
+from langchain_ollama import OllamaEmbeddings, ChatOllama
 
 
 # Default configuration
-DEFAULT_MODEL = "llama2"
+DEFAULT_MODEL = "mistral"
 DEFAULT_TEMPLATE = """Answer the question based only on the following context:
 
 {context}
 
 Question: {question}
-"""
+
+Answer:"""
 
 
-def create_embeddings(model: str = DEFAULT_MODEL) -> OllamaEmbeddings:
+def create_embeddings(model: str = "nomic-embed-text") -> OllamaEmbeddings:
     """Create an embedding model.
 
     :param model: The Ollama model to use for embeddings
@@ -75,13 +75,13 @@ def create_qa_chain(
     vector_store: Chroma,
     model: str = DEFAULT_MODEL,
     filters: Optional[Dict[str, str]] = None,
-) -> RetrievalQA:
+) -> RunnablePassthrough:
     """Create a QA chain for querying documents.
 
     :param vector_store: The vector store to query
     :param model: The Ollama model to use
     :param filters: Optional filters to apply to the retriever
-    :return: A RetrievalQA chain
+    :return: A RunnablePassthrough chain
     :raises ValueError: If the vector store is invalid
     """
     if not vector_store:
@@ -91,11 +91,20 @@ def create_qa_chain(
         search_kwargs={"filter": filters} if filters else {}
     )
 
+    # Create the LLM
+    llm = ChatOllama(model=model)
+
+    # Create the prompt
     prompt = PromptTemplate.from_template(DEFAULT_TEMPLATE)
 
+    # Create the chain
     chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
+        {
+            "context": retriever,
+            "question": RunnablePassthrough()
+        }
         | prompt
+        | llm
         | StrOutputParser()
     )
 

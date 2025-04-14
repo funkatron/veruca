@@ -1,140 +1,92 @@
 # Veruca
 
-A tool for searching and querying Obsidian notes using local language models.
+Veruca is a command-line tool that enables semantic search over your Obsidian vault using local language models. It indexes your notes and allows you to query them using natural language, leveraging the power of Ollama for embeddings and text generation.
 
-## What is Veruca?
+## Features
 
-Veruca is a command-line tool that enables you to:
-- Search your Obsidian notes using natural language queries
-- Filter results based on metadata and tags
-- Process and index your notes locally
-- Maintain privacy by running entirely on your machine
+- Local-first: All processing happens on your machine using Ollama
+- Semantic search: Find relevant notes based on meaning, not just keywords
+- Filter support: Narrow down results using frontmatter metadata
+- Fast indexing: Efficiently process and update your vault
+- Privacy-focused: Your notes never leave your computer
 
-## Getting Started
+## Installation
 
-### 1. Install Ollama
+1. Install [Ollama](https://ollama.ai)
+2. Install Veruca:
+   ```bash
+   pip install veruca
+   ```
 
-First, you need to install Ollama, which runs the language models locally:
-- Visit [ollama.com/download](https://ollama.com/download)
-- Download and install Ollama for your system
-- After installation, run:
-  ```bash
-  ollama pull nomic-embed-text  # For embeddings
-  ollama pull llama2           # For query responses
-  ```
+## Usage
 
-### 2. Install Veruca
+Veruca uses a command-based interface with the following structure:
 
 ```bash
-# Clone the repository
-git clone https://github.com/funkatron/veruca.git
-cd veruca
-
-# Create a virtual environment (like a clean workspace)
-python -m venv venv
-
-# Activate the virtual environment
-# On Mac/Linux:
-source venv/bin/activate
-# On Windows:
-venv\Scripts\activate
-
-# Install Veruca
-pip install -e .
+veruca <command> [options]
 ```
 
-## Using Veruca
+Available commands:
 
-Veruca provides a simple command-line interface with three main actions:
+### Query
 
-### 1. Query Your Vault
-
-Search your Obsidian notes using natural language:
+Search your vault using natural language:
 
 ```bash
-veruca query "What are my active projects?" --filter status=active
-```
-
-Options:
-- `query`: Your question (required)
-- `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
-- `--filter`: Filter by metadata (e.g., 'tags=python,status=active')
-- `--model`: Language model to use (default: llama2)
-
-### 2. Index Your Vault
-
-Create or update the search index for your vault:
-
-```bash
-veruca index --vault-path ~/my-vault
+veruca query "What are my project deadlines?" --vault-path ~/vault
 ```
 
 Options:
 - `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
-- `--model`: Embedding model to use (default: nomic-embed-text)
+- `--filter`: Filter results by frontmatter fields (e.g., "tags=project,status=active")
 
-### 3. Manage Ollama Server
+### Index
 
-Control the Ollama server that runs the language models:
+Index or reindex your vault:
 
 ```bash
-# Check server status
-veruca ollama status
+veruca index --vault-path ~/vault
+```
 
-# Start the server
-veruca ollama start
+Options:
+- `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
+- `--model`: Specify the embedding model to use (default: nomic-embed-text)
 
-# Stop the server
-veruca ollama stop
+### Ollama Management
+
+Manage the Ollama server:
+
+```bash
+veruca ollama status  # Check if Ollama is running
+veruca ollama start   # Start the Ollama server
+veruca ollama stop    # Stop the Ollama server
 ```
 
 ## How It Works
 
-Veruca processes your notes in several steps:
+1. When you index your vault, Veruca:
+   - Scans your vault for markdown files
+   - Extracts content and frontmatter metadata
+   - Generates embeddings using Ollama
+   - Stores the index locally
 
-1. **Document Processing**
-   - Reads your Obsidian markdown files
-   - Extracts metadata, tags, and links
-   - Processes Obsidian-specific features
+2. When you query:
+   - Your question is converted to an embedding
+   - Relevant notes are retrieved using semantic similarity
+   - A language model summarizes the results
+   - Filters are applied based on frontmatter
 
-2. **Indexing**
-   - Splits documents into manageable chunks
-   - Generates embeddings using nomic-embed-text
-   - Stores vectors in a local database
+## Requirements
 
-3. **Querying**
-   - Converts your question into embeddings
-   - Finds similar content in the vector store
-   - Filters results based on metadata
-   - Generates responses using llama2
-
-## Features
-
-- Works with Obsidian features:
-  - Internal links (`[[filename]]` and `[[filename|display text]]`)
-  - Frontmatter (YAML metadata)
-  - Tags (`#tag` and nested tags `#tag/subtag`)
-  - Callouts (admonitions)
-- Everything runs locally on your computer
-- No data is sent to the cloud
-- Command-line interface
-
-## Need Help?
-
-If you run into any issues:
-1. Check if Ollama is running (`veruca ollama status`)
-2. Make sure your Obsidian vault path is correct
-3. Try a simple query first to test
-4. Ensure you have the required models pulled (`nomic-embed-text` and `llama2`)
+- Python 3.8 or higher
+- Ollama installed and running
+- Required models:
+  - nomic-embed-text (for embeddings)
 
 ## Contributing
 
-Want to help improve Veruca? Great! Here's how:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a Pull Request
+Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.

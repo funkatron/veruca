@@ -20,12 +20,12 @@ from .parser import (
 class ObsidianVault(DataSource):
     """A data source for Obsidian vaults."""
 
-    def __init__(self, vault_path: str, model: str = "llama2"):
+    def __init__(self, vault_path: str, model: str = "nomic-embed-text"):
         """Initialize the Obsidian vault data source.
 
         Args:
             vault_path: Path to the Obsidian vault
-            model: The Ollama model to use
+            model: The Ollama model to use for embeddings (default: nomic-embed-text)
         """
         self.vault_path = Path(vault_path)
         self.model = model
@@ -54,7 +54,8 @@ class ObsidianVault(DataSource):
                 # Extract tags from both frontmatter and content
                 tags = set(frontmatter.get("tags", []))
                 tags.update(extract_tags(content))
-                frontmatter["tags"] = list(tags)
+                # Convert tags to comma-separated string for ChromaDB
+                frontmatter["tags"] = ",".join(tags)
 
                 # Process Obsidian-specific syntax
                 content = process_obsidian_links(content, str(self.vault_path))
@@ -112,7 +113,7 @@ class ObsidianVault(DataSource):
         # Create and run the QA chain
         chain = create_qa_chain(
             vector_store=self.vector_store,
-            model=self.model,
+            model="mistral",  # Use mistral for query responses
             filters=filters
         )
 
