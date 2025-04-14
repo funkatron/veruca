@@ -7,7 +7,7 @@ according to their rules and common usage patterns.
 
 import re
 import pytest
-from obsidian import TAG_PATTERN
+from veruca.obsidian import TAG_PATTERN
 
 def find_tags(text: str) -> list[str]:
     """Helper function to find all tags in a line of text."""
@@ -129,6 +129,6 @@ Back to normal text with #valid-tag.
 > A quote with #quoted-tag
 '''
     expected = ["real-tag", "another/nested/tag", "valid-tag", "quoted-tag"]
-    from obsidian import extract_tags
+    from veruca.obsidian import extract_tags
     tags = extract_tags(text)
     assert sorted(tags) == sorted(expected)

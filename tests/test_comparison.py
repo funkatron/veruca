@@ -17,7 +17,7 @@ Here are some #tags: #project #ideas #2024
 # ============== Pytest Style ==============
 import pytest
 from pathlib import Path
-from obsidian import parse_frontmatter, extract_tags
+from veruca.obsidian import parse_frontmatter, extract_tags
 
 # Pytest fixtures are very clean and reusable
 @pytest.fixture
@@ -55,7 +55,7 @@ def test_extract_tags_pytest():
 
 # Pytest makes it easy to test exceptions
 def test_error_handling_pytest():
-    from obsidian import load_markdown_files
+    from veruca.obsidian import load_markdown_files
     with pytest.raises(SystemExit):
         load_markdown_files("/nonexistent/path")
 
@@ -85,7 +85,7 @@ class TestObsidian(unittest.TestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_parse_frontmatter_unittest(self):
-        from obsidian import parse_frontmatter
+        from veruca.obsidian import parse_frontmatter
         frontmatter, content = parse_frontmatter(self.sample_content)
 
         self.assertEqual(frontmatter["title"], "Test Note")
@@ -103,7 +103,7 @@ class TestObsidian(unittest.TestCase):
         self.assertEqual(len(tags), 4)  # Updated to expect 4 tags
 
     def test_error_handling_unittest(self):
-        from obsidian import load_markdown_files
+        from veruca.obsidian import load_markdown_files
         with self.assertRaises(SystemExit):
             load_markdown_files("/nonexistent/path")
 
