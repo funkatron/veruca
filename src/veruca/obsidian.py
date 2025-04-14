@@ -67,15 +67,19 @@ TAG_PATTERN = r'(?:^|\s|[^\w#])#([\w-]+(?:/[\w-]+)*)(?=(?:\s|[^\w#/]|/(?!\w)|#|$
 
 # Custom prompt template for better context
 CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
-The context comes from various notes, and each piece of information includes metadata about its source.
+Each document has two sections:
+1. Content: The actual content of the document
+2. Metadata: Information about the document like status, tags, etc.
 
-Context information:
+When asked about metadata fields (like status, tags, etc.), ONLY look at the metadata section of the documents.
+Do not try to infer metadata values from the content.
+Always include the exact metadata values in your response.
+When asked about metadata, start your response with "Looking at the metadata section:" followed by the relevant values.
+
+Context:
 {context}
 
 Question: {question}
-
-Please provide a detailed answer based on the context. If the information comes from specific notes, mention them by name.
-If you're not sure about something, say so. Don't make up information that isn't in the context.
 
 Answer:"""
 
@@ -205,15 +209,17 @@ def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]
     # Get all markdown files recursively
     for md_file in vault_dir.rglob("*.md"):
         try:
+            print(f"\nDEBUG - Processing file: {md_file}")
             with open(md_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Parse frontmatter
             frontmatter, content_without_frontmatter = parse_frontmatter(content)
-            print(f"Attempting to parse YAML: {frontmatter}")
+            print(f"DEBUG - Parsed frontmatter: {frontmatter}")
 
             # Extract inline tags
             inline_tags = extract_tags(content_without_frontmatter)
+            print(f"DEBUG - Extracted inline tags: {inline_tags}")
 
             # Merge frontmatter tags with inline tags
             all_tags = set()
@@ -228,13 +234,10 @@ def load_markdown_files(vault_path: str) -> List[Tuple[str, Dict[str, Any], str]
             metadata = {
                 "source": md_file.name,
                 "path": str(md_file.relative_to(vault_dir)),
-                "tags": list(all_tags)  # Store as a list
+                **{k: v for k, v in frontmatter.items() if k != "tags"},  # Add all frontmatter fields except tags
+                "tags": list(all_tags)  # Store merged tags as a list
             }
-
-            # Add any remaining frontmatter fields
-            for key, value in frontmatter.items():
-                if key != "tags":
-                    metadata[key] = value
+            print(f"DEBUG - Final metadata: {metadata}")
 
             # Process Obsidian-specific features
             processed_content = process_obsidian_links(content_without_frontmatter, vault_dir)
@@ -306,6 +309,11 @@ def query_vault(query: str, filters: Dict[str, str] = None) -> str:
         # Get relevant documents
         docs = vector_store.similarity_search(query)
         print(f"Found {len(docs)} relevant documents")
+        print("\nDEBUG - Retrieved documents:")
+        for i, doc in enumerate(docs):
+            print(f"\nDocument {i+1}:")
+            print("Content:", doc.page_content[:100] + "...")
+            print("Metadata:", doc.metadata)
 
         # Filter documents by metadata if specified
         if filters:
@@ -326,18 +334,68 @@ def query_vault(query: str, filters: Dict[str, str] = None) -> str:
                 if doc_matches:
                     filtered_docs.append(doc)
             docs = filtered_docs
-            print(f"After filtering: {len(docs)} documents")
+            print(f"\nAfter filtering: {len(docs)} documents")
+            print("\nDEBUG - Filtered documents:")
+            for i, doc in enumerate(docs):
+                print(f"\nFiltered Document {i+1}:")
+                print("Content:", doc.page_content[:100] + "...")
+                print("Metadata:", doc.metadata)
 
         for doc in docs:
             print(f"Document metadata: {doc.metadata}")
 
+        # Create document prompt that includes metadata
+        document_prompt = PromptTemplate(
+            input_variables=["page_content", "metadata"],
+            template="""Content:
+{page_content}
+
+Metadata:
+{metadata}
+---"""
+        )
+
         # Create QA chain with custom prompt
         prompt = PromptTemplate(template=CUSTOM_PROMPT, input_variables=["context", "question"])
+
+        # Create retriever with filters
+        search_kwargs = {}
+        if filters:
+            search_kwargs["filter"] = {}
+            for field, value in filters.items():
+                if field == "tags":
+                    # Handle tags as a list
+                    search_kwargs["filter"][field] = {"$contains": value}
+                else:
+                    search_kwargs["filter"][field] = value
+
+        retriever = vector_store.as_retriever(search_kwargs=search_kwargs)
+
+        # Debug: Print document formatting
+        def format_doc_with_debug(doc):
+            formatted = {
+                "page_content": doc.page_content,
+                "metadata": "\n".join(f"{k}: {v}" for k, v in sorted(doc.metadata.items()))
+            }
+            print("\nDEBUG - Document being formatted:")
+            print("Raw metadata:", doc.metadata)
+            print("Formatted document:")
+            print("Content:", formatted["page_content"])
+            print("Metadata:", formatted["metadata"])
+            print("---")
+            return formatted
+
         qa_chain = RetrievalQA.from_chain_type(
             llm=ChatOllama(model="mistral"),
             chain_type="stuff",
-            retriever=vector_store.as_retriever(),
-            chain_type_kwargs={"prompt": prompt}
+            retriever=retriever,
+            chain_type_kwargs={
+                "prompt": prompt,
+                "document_prompt": document_prompt,
+                "document_variable_name": "context",
+                "document_separator": "\n\n",
+                "format_document": format_doc_with_debug
+            }
         )
         print("Created QA chain")
 
