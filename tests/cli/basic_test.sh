@@ -74,7 +74,13 @@ echo "✅ Basic query test passed"
 
 # Test 5: Query with Filters
 echo "Test 5: Query with Filters"
-veruca query "What is the status?" --vault-path "$TEST_VAULT" --filter "tags=python" || (echo "Error: Filtered query failed" && exit 1)
+RESULT=$(veruca query "Look at ONLY the metadata section of the documents. What is the value of the status field?" --vault-path "$TEST_VAULT" --filter "status=active")
+echo "DEBUG - Query Response:"
+echo "$RESULT"
+if [[ ! "$RESULT" =~ "metadata" ]] || [[ ! "$RESULT" =~ "active" ]]; then
+    echo "Error: Expected metadata with status 'active' in response"
+    exit 1
+fi
 echo "✅ Filtered query test passed"
 
 # Clean up

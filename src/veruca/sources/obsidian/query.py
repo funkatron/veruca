@@ -3,19 +3,42 @@
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple, Any
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 
 from langchain_core.documents import Document
+from langchain_core.prompts import PromptTemplate
 
 from ...core.base import DataSource
-from ...core.embeddings import create_embeddings, create_vector_store, create_qa_chain
+from ...core.embeddings import (
+    create_embeddings,
+    create_vector_store,
+    create_qa_chain,
+)
 from .parser import (
     parse_frontmatter,
     extract_tags,
     process_obsidian_links,
     process_callouts,
+    TAG_PATTERN,
 )
 
+# Custom prompt template for better context
+CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
+Each document has two sections:
+1. Content: The actual content of the document
+2. Metadata: Information about the document like status, tags, etc.
+
+When asked about metadata fields (like status, tags, etc.), ONLY look at the metadata section of the documents.
+Do not try to infer metadata values from the content.
+Always include the exact metadata values in your response.
+When asked about metadata, start your response with "Looking at the metadata section:" followed by the relevant values.
+
+Context:
+{context}
+
+Question: {question}
+
+Answer:"""
 
 class ObsidianVault(DataSource):
     """A data source for Obsidian vaults."""
@@ -98,23 +121,100 @@ class ObsidianVault(DataSource):
         )
 
     def query(self, query: str, filters: Optional[Dict[str, str]] = None) -> str:
-        """Query the indexed vault.
+        """Query the vector store with a question."""
+        try:
+            if not self.vector_store:
+                self.index_documents()
 
-        Args:
-            query: The query string
-            filters: Optional filters to apply
+            # Create QA chain with custom prompt
+            chain = create_qa_chain(
+                vector_store=self.vector_store,
+                filters=filters,
+                prompt_template=CUSTOM_PROMPT
+            )
 
-        Returns:
-            The query result as a string
-        """
-        if not self.vector_store:
-            self.index_documents()
+            # Run the query
+            return chain.invoke(query)
 
-        # Create and run the QA chain
-        chain = create_qa_chain(
-            vector_store=self.vector_store,
-            model="mistral",  # Use mistral for query responses
-            filters=filters
-        )
+        except Exception as e:
+            print(f"Error: {str(e)}", file=sys.stderr)
+            sys.exit(1)
 
-        return chain.invoke(query)
+def apply_filters(docs: List[Document], filters: Optional[Dict[str, Union[str, List[str]]]] = None) -> List[Document]:
+    """Apply filters to a list of documents.
+
+    Args:
+        docs: List of documents to filter
+        filters: Dictionary of field:value pairs to filter by. For tags, can be string or list of strings.
+
+    Returns:
+        Filtered list of documents
+
+    Raises:
+        ValueError: If filter field is invalid or filter value type is unsupported
+    """
+    if not filters:
+        return docs
+
+    filtered_docs = []
+    valid_fields = {"status", "tags", "priority", "metadata"}  # Add other valid fields as needed
+
+    for doc in docs:
+        doc_matches = True
+        for field, value in filters.items():
+            # Validate filter field
+            if field not in valid_fields:
+                raise ValueError(f"Invalid filter field: {field}")
+
+            # Validate filter value type
+            if not isinstance(value, (str, list)):
+                raise ValueError(f"Invalid filter value type for {field}: {type(value)}")
+
+            # Handle tag filtering specially
+            if field == "tags":
+                doc_tags = doc.metadata.get("tags", "")
+                if not doc_tags:
+                    doc_matches = False
+                    break
+
+                # Convert filter value to list of individual tags
+                if isinstance(value, str):
+                    # If exact comma-separated string match is requested
+                    if "," in value:
+                        if doc_tags != value:
+                            doc_matches = False
+                            break
+                        continue
+                    filter_tags = [value]
+                else:
+                    filter_tags = value
+
+                # Convert doc tags to list if it's a comma-separated string
+                if isinstance(doc_tags, str):
+                    if "," in doc_tags:
+                        doc_tag_list = [t.strip() for t in doc_tags.split(",")]
+                    else:
+                        doc_tag_list = [doc_tags]
+                else:
+                    doc_tag_list = doc_tags
+
+                # Check if any filter tag matches
+                if not any(tag in doc_tag_list for tag in filter_tags):
+                    doc_matches = False
+                    break
+
+            # Handle other fields
+            else:
+                doc_value = doc.metadata.get(field)
+                if doc_value is None:
+                    doc_matches = False
+                    break
+                filter_values = value if isinstance(value, list) else [value]
+                if doc_value not in filter_values:
+                    doc_matches = False
+                    break
+
+        if doc_matches:
+            filtered_docs.append(doc)
+
+    return filtered_docs
