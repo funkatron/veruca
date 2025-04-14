@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 
 # Default configuration
-DEFAULT_MODEL = "mistral"
+DEFAULT_MODEL = "llama2"
 DEFAULT_TEMPLATE = """Answer the question based only on the following context:
 
 {context}
@@ -42,7 +42,14 @@ class FormattingRetriever(BaseRetriever, BaseModel):
             # Format metadata as key: value pairs
             formatted_metadata = []
             for key, value in sorted(doc.metadata.items()):
-                if isinstance(value, (list, dict)):
+                if key == "tags":
+                    # Handle tags specially
+                    if isinstance(value, str):
+                        tags = [t.strip() for t in value.split(",") if t.strip()]
+                    else:
+                        tags = [t.strip() for t in value if t.strip()]
+                    formatted_metadata.append(f"tags: {', '.join(sorted(tags))}")  # Sort for consistent display
+                elif isinstance(value, (list, dict)):
                     formatted_metadata.append(f"{key}: {value}")
                 else:
                     formatted_metadata.append(f"{key}: {value}")
@@ -55,7 +62,7 @@ class FormattingRetriever(BaseRetriever, BaseModel):
 
 Content:
 {doc.page_content}""",
-                    metadata={}
+                    metadata=doc.metadata  # Keep original metadata for filtering
                 )
             )
         return formatted_docs
@@ -97,10 +104,13 @@ def create_vector_store(
         except OSError as e:
             raise OSError(f"Failed to create persist directory: {str(e)}")
 
+    # Create a new collection each time
+    collection_name = "veruca_" + os.urandom(4).hex()
     db = Chroma.from_documents(
         documents=documents,
         embedding=embeddings,
         persist_directory=str(persist_dir) if persist_dir else None,
+        collection_name=collection_name
     )
 
     if persist_dir:
@@ -131,7 +141,49 @@ def create_qa_chain(
     filters: Optional[Dict[str, str]] = None,
     prompt_template: Optional[str] = None
 ) -> RetrievalQA:
-    """Create a QA chain for querying the vector store."""
+    """Create a QA chain for querying the vector store.
+
+    Args:
+        vector_store: The vector store to query
+        model: The Ollama model to use for generating answers
+        filters: Optional dictionary of filters to apply to the search. Supports:
+            - Simple equality: `{"status": "active"}` - matches documents where status equals "active"
+            - Tag filtering: `{"tags:in": "python,programming"}` - matches documents with either "python" or "programming" tags
+            - Numeric comparisons:
+                - `{"priority:gt": "3"}` - matches documents with priority > 3
+                - `{"priority:lte": "3"}` - matches documents with priority ≤ 3
+                - `{"priority:gte": "3"}` - matches documents with priority ≥ 3
+                - `{"priority:lt": "3"}` - matches documents with priority < 3
+            - Other operators:
+                - `{"status:ne": "draft"}` - matches documents where status is not "draft"
+                - `{"tags:nin": "archived,old"}` - matches documents without "archived" or "old" tags
+        prompt_template: Optional custom prompt template for the QA chain
+
+    Returns:
+        A RetrievalQA chain configured with the given parameters
+
+    Examples:
+        ```python
+        # Simple status filter
+        filters = {"status": "active"}
+
+        # Filter by multiple tags
+        filters = {"tags:in": "python,programming"}
+
+        # Filter by numeric value
+        filters = {"priority:gt": "3"}
+
+        # Exclude certain tags
+        filters = {"tags:nin": "archived,old"}
+
+        # Combine multiple filters
+        filters = {
+            "status:ne": "draft",
+            "tags:in": "python,programming",
+            "priority:gt": "3"
+        }
+        ```
+    """
     # Create document prompt that includes metadata
     document_prompt = PromptTemplate(
         input_variables=["page_content"],
@@ -147,13 +199,45 @@ def create_qa_chain(
     # Create retriever with filters
     search_kwargs = {}
     if filters:
-        search_kwargs["filter"] = {}
+        filter_conditions = []
         for field, value in filters.items():
-            if field == "tags":
-                # Handle tags as a list
-                search_kwargs["filter"][field] = {"$eq": value}
+            # Handle special operators
+            if ":" in field:
+                field_name, operator = field.split(":", 1)
+                if operator == "in":
+                    # Handle $in operator (comma-separated values)
+                    values = [v.strip() for v in value.split(",")]
+                    filter_conditions.append({field_name: {"$in": values}})
+                elif operator == "nin":
+                    # Handle $nin operator (comma-separated values)
+                    values = [v.strip() for v in value.split(",")]
+                    filter_conditions.append({field_name: {"$nin": values}})
+                elif operator == "ne":
+                    # Handle $ne operator
+                    filter_conditions.append({field_name: {"$ne": value}})
+                elif operator == "gt":
+                    # Handle $gt operator
+                    filter_conditions.append({field_name: {"$gt": value}})
+                elif operator == "gte":
+                    # Handle $gte operator
+                    filter_conditions.append({field_name: {"$gte": value}})
+                elif operator == "lt":
+                    # Handle $lt operator
+                    filter_conditions.append({field_name: {"$lt": value}})
+                elif operator == "lte":
+                    # Handle $lte operator
+                    filter_conditions.append({field_name: {"$lte": value}})
+                else:
+                    raise ValueError(f"Unknown operator: {operator}")
             else:
-                search_kwargs["filter"][field] = {"$eq": value}
+                # Default to $eq operator
+                filter_conditions.append({field: {"$eq": value}})
+
+        # Only use $and if we have multiple conditions
+        if len(filter_conditions) > 1:
+            search_kwargs["filter"] = {"$and": filter_conditions}
+        else:
+            search_kwargs["filter"] = filter_conditions[0]
 
     # Create base retriever and wrap it with formatting
     base_retriever = vector_store.as_retriever(search_kwargs=search_kwargs)

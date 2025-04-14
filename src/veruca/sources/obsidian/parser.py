@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any
 
 import yaml
+from langchain_core.documents import Document
 from markdown import Markdown
 
 # Tag pattern for Obsidian-style tags
@@ -13,34 +14,38 @@ TAG_PATTERN = r'(?:^|\s)#([a-zA-Z0-9/_-]+)(?=[^\w/]|$)'
 
 
 def parse_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
-    """Parse YAML frontmatter from a markdown file.
+    """Parse YAML frontmatter from markdown content.
 
     Args:
-        content: The markdown content
+        content: The markdown content to parse
 
     Returns:
-        A tuple of (frontmatter dict, remaining content)
+        Tuple of (metadata dict, content without frontmatter)
+
+    Raises:
+        ValueError: If frontmatter is invalid or missing closing delimiter
     """
-    if not content.startswith('---\n'):
+    # Check for frontmatter
+    if not content.startswith("---"):
         return {}, content
 
+    # Split content into frontmatter and body
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        raise ValueError("Missing closing frontmatter delimiter (---)")
+
+    frontmatter_str = parts[1].strip()
+    content_without_frontmatter = parts[2].strip()
+
+    # Parse YAML
     try:
-        # Find the end of the frontmatter
-        _, rest = content.split('---\n', 1)
-        if '\n---\n' not in rest:
-            return {}, content
-        frontmatter_str, content = rest.split('\n---\n', 1)
-
-        # Parse the frontmatter
         frontmatter = yaml.safe_load(frontmatter_str)
-        if not isinstance(frontmatter, dict):
+        if frontmatter is None:
             frontmatter = {}
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML frontmatter: {str(e)}")
 
-        return frontmatter, content.strip()
-
-    except (yaml.YAMLError, ValueError) as e:
-        print(f"Error: Invalid YAML frontmatter: {str(e)}", file=sys.stderr)
-        sys.exit(1)
+    return frontmatter, content_without_frontmatter
 
 
 def extract_tags(content: str) -> Set[str]:
@@ -98,3 +103,26 @@ def process_callouts(content: str) -> str:
     # Convert > [!NOTE] to [NOTE]
     content = re.sub(r'>\s*\[!([^\]]+)\]', r'[\1]', content)
     return content
+
+
+def format_document(doc: Document) -> Dict[str, str]:
+    """Format a document for the LLM chain.
+
+    Args:
+        doc: The document to format
+
+    Returns:
+        Dict with formatted page_content and metadata
+    """
+    # Format metadata as key: value pairs
+    formatted_metadata = []
+    for key, value in sorted(doc.metadata.items()):
+        if isinstance(value, (list, dict)):
+            formatted_metadata.append(f"{key}: {value}")
+        else:
+            formatted_metadata.append(f"{key}: {value}")
+
+    return {
+        "page_content": doc.page_content,
+        "metadata": "\n".join(formatted_metadata) if formatted_metadata else ""
+    }

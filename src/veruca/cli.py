@@ -4,6 +4,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from typing import Dict
 
 from .sources.obsidian.query import ObsidianVault
 
@@ -31,7 +32,8 @@ def parse_args():
     query_parser.add_argument(
         "--filter",
         type=str,
-        help="Filter results by metadata (e.g., 'tags=python,status=active')",
+        action="append",
+        help="Filter results by metadata (e.g., 'tags=python,status=active' or 'priority:gt=3')",
     )
 
     # Index command
@@ -51,10 +53,7 @@ def parse_args():
 
     # Ollama command
     ollama_parser = subparsers.add_parser("ollama", help="Manage Ollama server")
-    ollama_subparsers = ollama_parser.add_subparsers(dest="ollama_command", required=True)
-    ollama_subparsers.add_parser("status", help="Check Ollama server status")
-    ollama_subparsers.add_parser("start", help="Start Ollama server")
-    ollama_subparsers.add_parser("stop", help="Stop Ollama server")
+    ollama_parser.add_argument("action", choices=["status"], help="Action to perform")
 
     return parser.parse_args()
 
@@ -73,36 +72,47 @@ def check_ollama_status():
         return False
 
 
+def parse_filter(filter_str: str) -> Dict[str, str]:
+    """Parse a filter string into a key-value pair.
+
+    Examples:
+        status=active -> {"status": "active"}
+        tags:in=python,programming -> {"tags:in": "python,programming"}
+        priority:gt=3 -> {"priority:gt": "3"}
+    """
+    try:
+        key, value = filter_str.split("=", 1)  # Split on first = only
+        return {key.strip(): value.strip()}
+    except ValueError:
+        raise ValueError(f"Invalid filter format: {filter_str}. Expected format: field=value or field:operator=value")
+
+
 def main():
     """Main entry point for the CLI."""
     args = parse_args()
 
     if args.command == "ollama":
-        if args.ollama_command == "status":
+        if args.action == "status":
             if check_ollama_status():
                 print("Ollama server is running")
             else:
                 print("Ollama server is not running")
                 sys.exit(1)
-        elif args.ollama_command == "start":
-            subprocess.run(["ollama", "serve"], check=True)
-        elif args.ollama_command == "stop":
-            subprocess.run(["pkill", "ollama"], check=False)
-        return
+        else:
+            print("Invalid Ollama command")
+            sys.exit(1)
 
     # For query and index commands, ensure Ollama is running
     if not check_ollama_status():
         print("Error: Ollama server is not running")
-        print("Please start it with: veruca ollama start")
+        print("Please start it with: veruca ollama status")
         sys.exit(1)
 
     if args.command == "query":
-        # Parse filter if provided
         filters = {}
         if args.filter:
-            for filter_part in args.filter.split(","):
-                key, value = filter_part.split("=")
-                filters[key.strip()] = value.strip()
+            for filter_part in args.filter:
+                filters.update(parse_filter(filter_part))
 
         vault = ObsidianVault(args.vault_path)
         results = vault.query(args.query, filters=filters)
