@@ -45,22 +45,48 @@ pip install -e .
 
 ## Using Veruca
 
-### Basic Usage
+Veruca provides a simple command-line interface with three main actions:
 
-To search your Obsidian vault:
+### 1. Query Your Vault
+
+Search your Obsidian notes using natural language:
+
 ```bash
-python -m veruca.cli --query "What are my active projects?" --filter status=active
+veruca query "What are my active projects?" --filter status=active
 ```
 
-### Command Options
+Options:
+- `query`: Your question (required)
+- `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
+- `--filter`: Filter by metadata (e.g., 'tags=python,status=active')
+- `--model`: Language model to use (default: llama2)
 
-- `--query`: Your question (required)
-- `--vault-path`: Where your Obsidian vault is (default: ~/Obsidian)
-- `--filter`: Filter by tags or other metadata (e.g., 'tags=python,status=active')
-- `--model`: Which language model to use for responses (default: llama2)
-- `--ollama-status`: Check if Ollama server is running
-- `--start-ollama`: Start the Ollama server
-- `--stop-ollama`: Stop the Ollama server
+### 2. Index Your Vault
+
+Create or update the search index for your vault:
+
+```bash
+veruca index --vault-path ~/my-vault
+```
+
+Options:
+- `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
+- `--model`: Embedding model to use (default: nomic-embed-text)
+
+### 3. Manage Ollama Server
+
+Control the Ollama server that runs the language models:
+
+```bash
+# Check server status
+veruca ollama status
+
+# Start the server
+veruca ollama start
+
+# Stop the server
+veruca ollama stop
+```
 
 ## How It Works
 
@@ -96,7 +122,7 @@ Veruca processes your notes in several steps:
 ## Need Help?
 
 If you run into any issues:
-1. Check if Ollama is running (`ollama serve` or `--ollama-status`)
+1. Check if Ollama is running (`veruca ollama status`)
 2. Make sure your Obsidian vault path is correct
 3. Try a simple query first to test
 4. Ensure you have the required models pulled (`nomic-embed-text` and `llama2`)
