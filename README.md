@@ -1,95 +1,113 @@
 # Veruca
 
-A collection of tools for working with local LLMs, starting with Obsidian vault querying.
+A tool for searching and querying Obsidian notes using local language models.
 
-## Features
+## What is Veruca?
 
-- Query your Obsidian vault using local LLMs
-- Support for Obsidian-specific features:
-  - Internal links (`[[filename]]` and `[[filename|display text]]`)
-  - Frontmatter (YAML metadata)
-  - Tags (`#tag` and nested tags `#tag/subtag`)
-  - Callouts (admonitions)
-- Local embedding generation using Ollama
-- Natural language querying with metadata filtering
-- Persistent storage of embeddings using ChromaDB
-- Extensible architecture for adding new data sources
+Veruca is a command-line tool that enables you to:
+- Search your Obsidian notes using natural language queries
+- Filter results based on metadata and tags
+- Process and index your notes locally
+- Maintain privacy by running entirely on your machine
 
-## Installation
+## Getting Started
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/funkatron/veruca.git
-   cd veruca
-   ```
+### 1. Install Ollama
 
-2. Create a virtual environment and install dependencies:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -e .
-   ```
+First, you need to install Ollama, which runs the language models locally:
+- Visit [ollama.com/download](https://ollama.com/download)
+- Download and install Ollama for your system
+- After installation, run:
+  ```bash
+  ollama pull nomic-embed-text  # For embeddings
+  ollama pull llama2           # For query responses
+  ```
 
-3. Install Ollama and pull the required model:
-   ```bash
-   ollama pull llama2
-   ```
+### 2. Install Veruca
 
-## Usage
+```bash
+# Clone the repository
+git clone https://github.com/funkatron/veruca.git
+cd veruca
 
-### Querying Your Obsidian Vault
+# Create a virtual environment (like a clean workspace)
+python -m venv venv
 
+# Activate the virtual environment
+# On Mac/Linux:
+source venv/bin/activate
+# On Windows:
+venv\Scripts\activate
+
+# Install Veruca
+pip install -e .
+```
+
+## Using Veruca
+
+### Basic Usage
+
+To search your Obsidian vault:
 ```bash
 python -m veruca.cli --query "What are my active projects?" --filter status=active
 ```
 
-### Command Line Options
+### Command Options
 
-- `--query`: The query to search for in your vault (required)
-- `--vault-path`: Path to your Obsidian vault (default: ~/Obsidian)
-- `--filter`: Filter results by metadata (e.g., 'tags=python,status=active')
-- `--model`: Ollama model to use (default: llama2)
+- `--query`: Your question (required)
+- `--vault-path`: Where your Obsidian vault is (default: ~/Obsidian)
+- `--filter`: Filter by tags or other metadata (e.g., 'tags=python,status=active')
+- `--model`: Which language model to use for responses (default: llama2)
+- `--ollama-status`: Check if Ollama server is running
+- `--start-ollama`: Start the Ollama server
+- `--stop-ollama`: Stop the Ollama server
 
-## Development
+## How It Works
 
-### Project Structure
+Veruca processes your notes in several steps:
 
-```
-src/veruca/
-├── __init__.py
-├── core/
-│   ├── __init__.py
-│   ├── base.py        # Base classes for data sources
-│   ├── embeddings.py  # Common embedding functionality
-│   └── utils.py       # Shared utilities
-├── sources/
-│   ├── __init__.py
-│   └── obsidian/
-│       ├── __init__.py
-│       ├── parser.py  # Frontmatter, tags, links parsing
-│       └── query.py   # Obsidian-specific query handling
-└── cli.py
-```
+1. **Document Processing**
+   - Reads your Obsidian markdown files
+   - Extracts metadata, tags, and links
+   - Processes Obsidian-specific features
 
-### Adding a New Data Source
+2. **Indexing**
+   - Splits documents into manageable chunks
+   - Generates embeddings using nomic-embed-text
+   - Stores vectors in a local database
 
-1. Create a new module in `src/veruca/sources/`
-2. Implement the `DataSource` interface from `core/base.py`
-3. Add your data source to the CLI or create a new interface
+3. **Querying**
+   - Converts your question into embeddings
+   - Finds similar content in the vector store
+   - Filters results based on metadata
+   - Generates responses using llama2
 
-### Running Tests
+## Features
 
-```bash
-python -m pytest tests/ -v
-```
+- Works with Obsidian features:
+  - Internal links (`[[filename]]` and `[[filename|display text]]`)
+  - Frontmatter (YAML metadata)
+  - Tags (`#tag` and nested tags `#tag/subtag`)
+  - Callouts (admonitions)
+- Everything runs locally on your computer
+- No data is sent to the cloud
+- Command-line interface
+
+## Need Help?
+
+If you run into any issues:
+1. Check if Ollama is running (`ollama serve` or `--ollama-status`)
+2. Make sure your Obsidian vault path is correct
+3. Try a simple query first to test
+4. Ensure you have the required models pulled (`nomic-embed-text` and `llama2`)
 
 ## Contributing
 
+Want to help improve Veruca? Great! Here's how:
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+3. Make your changes
+4. Submit a Pull Request
 
 ## License
 
