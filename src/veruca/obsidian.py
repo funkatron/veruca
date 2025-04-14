@@ -66,15 +66,14 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 TAG_PATTERN = r'(?:^|\s|[^\w#])#([\w-]+(?:/[\w-]+)*)(?=(?:\s|[^\w#/]|/(?!\w)|#|$|:))'
 
 # Custom prompt template for better context
-CUSTOM_PROMPT = """You are a helpful assistant that answers questions based on the provided context from an Obsidian vault.
-Each document has two sections:
-1. Content: The actual content of the document
-2. Metadata: Information about the document like status, tags, etc.
+CUSTOM_PROMPT = """You are a string matching assistant. Your ONLY job is to find exact matches in the provided text.
 
-When asked about metadata fields (like status, tags, etc.), ONLY look at the metadata section of the documents.
-Do not try to infer metadata values from the content.
-Always include the exact metadata values in your response.
-When asked about metadata, start your response with "Looking at the metadata section:" followed by the relevant values.
+When asked about tags:
+1. Look for the line starting with "tags:" in the METADATA section
+2. Copy and paste ONLY the exact text that appears after "tags:"
+3. Do not add ANY other text or explanation
+4. Do not try to be helpful or format the response
+5. Do not look at the content section at all
 
 Context:
 {context}
@@ -293,6 +292,11 @@ def index_vault(vault_path: str) -> None:
 def query_vault(query: str, filters: Dict[str, str] = None) -> str:
     """Query the vector store with a question."""
     try:
+        # Silently convert deprecated tags field to filter
+        if filters and "tags" in filters:
+            tags_value = filters.pop("tags")
+            filters["tags:in"] = tags_value
+
         print(f"Querying with: {query}, filters: {filters}")
 
         # Create embedding model once and reuse
@@ -321,16 +325,74 @@ def query_vault(query: str, filters: Dict[str, str] = None) -> str:
             for doc in docs:
                 doc_matches = True
                 for field, value in filters.items():
-                    if field == "tags":
-                        # Special handling for tags since they're stored as comma-separated string
-                        doc_tags = doc.metadata.get("tags", "").split(",")
-                        filter_tags = value.split(",")
-                        if not any(tag in doc_tags for tag in filter_tags):
+                    # Handle special operators
+                    if ":" in field:
+                        field_name, operator = field.split(":", 1)
+                        if field_name == "tags":
+                            # Convert comma-separated values to list
+                            values = [v.strip() for v in value.split(",") if v.strip()]
+                            if operator == "in":
+                                # Match if any filter tag is in doc tags
+                                doc_tags = [t.strip() for t in doc.metadata.get("tags", "").split(",") if t.strip()]
+                                if any(tag in doc_tags for tag in values):
+                                    doc_matches = True
+                                else:
+                                    doc_matches = False
+                            elif operator == "nin":
+                                # Match if no filter tag is in doc tags
+                                doc_tags = [t.strip() for t in doc.metadata.get("tags", "").split(",") if t.strip()]
+                                if not any(tag in doc_tags for tag in values):
+                                    doc_matches = True
+                                else:
+                                    doc_matches = False
+                            else:
+                                raise ValueError(f"Invalid operator for tags: {operator}")
+                        else:
+                            # Handle numeric comparisons
+                            try:
+                                filter_value = float(value)
+                                if operator == "gt":
+                                    if doc.metadata.get(field) > filter_value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                elif operator == "gte":
+                                    if doc.metadata.get(field) >= filter_value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                elif operator == "lt":
+                                    if doc.metadata.get(field) < filter_value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                elif operator == "lte":
+                                    if doc.metadata.get(field) <= filter_value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                elif operator == "ne":
+                                    if doc.metadata.get(field) != filter_value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                else:
+                                    raise ValueError(f"Invalid operator: {operator}")
+                            except ValueError:
+                                # If not numeric, treat as string comparison
+                                if operator == "ne":
+                                    if doc.metadata.get(field) != value:
+                                        doc_matches = True
+                                    else:
+                                        doc_matches = False
+                                else:
+                                    raise ValueError(f"Invalid operator for non-numeric field: {operator}")
+                    else:
+                        # Simple equality check
+                        if doc.metadata.get(field) == value:
+                            doc_matches = True
+                        else:
                             doc_matches = False
-                            break
-                    elif doc.metadata.get(field) != value:
-                        doc_matches = False
-                        break
                 if doc_matches:
                     filtered_docs.append(doc)
             docs = filtered_docs
@@ -344,15 +406,36 @@ def query_vault(query: str, filters: Dict[str, str] = None) -> str:
         for doc in docs:
             print(f"Document metadata: {doc.metadata}")
 
+        # Debug: Print document formatting
+        def format_doc_with_debug(doc):
+            # Safely get metadata values
+            tags = doc.metadata.get("tags", "")
+            title = doc.metadata.get("title", "")
+
+            # Format metadata as a simple string
+            metadata_str = f"tags: {tags}\ntitle: {title}"
+
+            formatted = {
+                "page_content": doc.page_content,
+                "metadata": metadata_str
+            }
+
+            print("\nDEBUG - Document being formatted:")
+            print("Raw metadata:", doc.metadata)
+            print("Formatted document:")
+            print("Content:", formatted["page_content"])
+            print("Metadata:", formatted["metadata"])
+            print("---")
+            return formatted
+
         # Create document prompt that includes metadata
         document_prompt = PromptTemplate(
             input_variables=["page_content", "metadata"],
-            template="""Content:
-{page_content}
-
-Metadata:
+            template="""METADATA:
 {metadata}
----"""
+
+CONTENT:
+{page_content}"""
         )
 
         # Create QA chain with custom prompt
@@ -363,30 +446,50 @@ Metadata:
         if filters:
             search_kwargs["filter"] = {}
             for field, value in filters.items():
-                if field == "tags":
-                    # Handle tags as a list
-                    search_kwargs["filter"][field] = {"$contains": value}
+                # Handle special operators
+                if ":" in field:
+                    field_name, operator = field.split(":", 1)
+                    if field_name == "tags":
+                        # Convert comma-separated values to list
+                        values = [v.strip() for v in value.split(",") if v.strip()]
+                        if operator == "in":
+                            # Match if any filter tag is in doc tags
+                            search_kwargs["filter"][field_name] = {"$in": values}
+                        elif operator == "nin":
+                            # Match if no filter tag is in doc tags
+                            search_kwargs["filter"][field_name] = {"$nin": values}
+                        else:
+                            raise ValueError(f"Invalid operator for tags: {operator}")
+                    else:
+                        # Handle numeric comparisons
+                        try:
+                            filter_value = float(value)
+                            if operator == "gt":
+                                search_kwargs["filter"][field_name] = {"$gt": filter_value}
+                            elif operator == "gte":
+                                search_kwargs["filter"][field_name] = {"$gte": filter_value}
+                            elif operator == "lt":
+                                search_kwargs["filter"][field_name] = {"$lt": filter_value}
+                            elif operator == "lte":
+                                search_kwargs["filter"][field_name] = {"$lte": filter_value}
+                            elif operator == "ne":
+                                search_kwargs["filter"][field_name] = {"$ne": filter_value}
+                            else:
+                                raise ValueError(f"Invalid operator: {operator}")
+                        except ValueError:
+                            # If not numeric, treat as string comparison
+                            if operator == "ne":
+                                search_kwargs["filter"][field_name] = {"$ne": value}
+                            else:
+                                raise ValueError(f"Invalid operator for non-numeric field: {operator}")
                 else:
+                    # Simple equality check
                     search_kwargs["filter"][field] = value
 
         retriever = vector_store.as_retriever(search_kwargs=search_kwargs)
 
-        # Debug: Print document formatting
-        def format_doc_with_debug(doc):
-            formatted = {
-                "page_content": doc.page_content,
-                "metadata": "\n".join(f"{k}: {v}" for k, v in sorted(doc.metadata.items()))
-            }
-            print("\nDEBUG - Document being formatted:")
-            print("Raw metadata:", doc.metadata)
-            print("Formatted document:")
-            print("Content:", formatted["page_content"])
-            print("Metadata:", formatted["metadata"])
-            print("---")
-            return formatted
-
         qa_chain = RetrievalQA.from_chain_type(
-            llm=ChatOllama(model="mistral"),
+            llm=ChatOllama(model="llama2"),
             chain_type="stuff",
             retriever=retriever,
             chain_type_kwargs={
