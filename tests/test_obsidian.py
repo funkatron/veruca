@@ -16,7 +16,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from obsidian import (
+from veruca.obsidian import (
     parse_frontmatter,
     extract_tags,
     process_obsidian_links,
@@ -150,8 +150,8 @@ def test_index_and_query(test_vault):
     mock_qa.invoke.return_value = {"result": "Mock response for query containing test"}
 
     # Patch both Chroma and RetrievalQA
-    with patch('obsidian.Chroma', mock_chroma), \
-         patch('obsidian.RetrievalQA.from_chain_type', return_value=mock_qa):
+    with patch('veruca.obsidian.Chroma', mock_chroma), \
+         patch('veruca.obsidian.RetrievalQA.from_chain_type', return_value=mock_qa):
         # Test indexing
         index_vault(str(test_vault))
         mock_chroma.from_documents.assert_called_once()
